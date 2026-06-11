@@ -6,72 +6,72 @@ import yfinance as yf
 from datetime import datetime
 
 
-st.caption("Kostenloser ETF Steuer Rechner für Deutschland (FIFO, Vorabpauschale, Teilfreistellung)")
+# st.caption("Kostenloser ETF Steuer Rechner für Deutschland (FIFO, Vorabpauschale, Teilfreistellung)")
 
-st.markdown("""
-# ETF Steuer Rechner (Deutschland)
+# st.markdown("""
+# # ETF Steuer Rechner (Deutschland)
 
----
+# ---
 
-### ETF Steuer beim Verkauf berechnen
+# ### ETF Steuer beim Verkauf berechnen
 
-Dieser **ETF Steuer Rechner für Deutschland** hilft Ihnen dabei:
+# Dieser **ETF Steuer Rechner für Deutschland** hilft Ihnen dabei:
 
-- zu berechnen, **wie viele ETF-Anteile Sie steuerfrei verkaufen können**
-- herauszufinden, **wie viele Anteile Sie verkaufen müssen, um einen bestimmten Nettobetrag zu erhalten**
-- die **voraussichtliche Steuer beim Verkauf von ETFs** zu berechnen
+# - zu berechnen, **wie viele ETF-Anteile Sie steuerfrei verkaufen können**
+# - herauszufinden, **wie viele Anteile Sie verkaufen müssen, um einen bestimmten Nettobetrag zu erhalten**
+# - die **voraussichtliche Steuer beim Verkauf von ETFs** zu berechnen
 
-Der Rechner eignet sich besonders für Anleger, die ihren **Sparerpauschbetrag optimal nutzen** oder einen ETF-Verkauf planen.
+# Der Rechner eignet sich besonders für Anleger, die ihren **Sparerpauschbetrag optimal nutzen** oder einen ETF-Verkauf planen.
 
-Für die Berechnung benötigen Sie lediglich Ihre ETF-Käufe (**Anzahl, Preis und Kaufdatum**).
+# Für die Berechnung benötigen Sie lediglich Ihre ETF-Käufe (**Anzahl, Preis und Kaufdatum**).
 
----
+# ---
 
-### Welche Steuerregeln werden berücksichtigt?
+# ### Welche Steuerregeln werden berücksichtigt?
 
-Der ETF Steuer Rechner berücksichtigt wichtige steuerliche Regeln für ETFs in Deutschland:
+# Der ETF Steuer Rechner berücksichtigt wichtige steuerliche Regeln für ETFs in Deutschland:
 
-- **FIFO-Prinzip (First-In-First-Out)** bei Verkäufen  
-- **Teilfreistellung für Aktien-ETFs** (30% steuerfrei)  
-- **Vorabpauschale** bei thesaurierenden ETFs  
-- **Sparerpauschbetrag**  
-- **Verlustverrechnung über den Verlusttopf**
+# - **FIFO-Prinzip (First-In-First-Out)** bei Verkäufen  
+# - **Teilfreistellung für Aktien-ETFs** (30% steuerfrei)  
+# - **Vorabpauschale** bei thesaurierenden ETFs  
+# - **Sparerpauschbetrag**  
+# - **Verlustverrechnung über den Verlusttopf**
 
-Damit erhalten Sie eine möglichst realistische Schätzung der Steuer beim Verkauf Ihrer ETF-Anteile.
+# Damit erhalten Sie eine möglichst realistische Schätzung der Steuer beim Verkauf Ihrer ETF-Anteile.
 
----
+# ---
 
-### Beispiel
+# ### Beispiel
 
-Beispiel:  
-Wenn Sie herausfinden möchten, **wie viele ETF-Anteile Sie verkaufen können, ohne Steuern zu zahlen**, berechnet der Rechner für Sie:
+# Beispiel:  
+# Wenn Sie herausfinden möchten, **wie viele ETF-Anteile Sie verkaufen können, ohne Steuern zu zahlen**, berechnet der Rechner für Sie:
 
-- die **Anzahl der steuerfrei verkaufbaren Anteile**
-- den **Nettoerlös aus diesem steuerfreien Verkauf**
-- den **verbleibenden Sparerpauschbetrag**
+# - die **Anzahl der steuerfrei verkaufbaren Anteile**
+# - den **Nettoerlös aus diesem steuerfreien Verkauf**
+# - den **verbleibenden Sparerpauschbetrag**
 
-So können Sie leicht prüfen, wie Sie Ihren **Sparerpauschbetrag optimal ausnutzen**, ohne unnötig Steuern zu zahlen.
+# So können Sie leicht prüfen, wie Sie Ihren **Sparerpauschbetrag optimal ausnutzen**, ohne unnötig Steuern zu zahlen.
 
----
+# ---
 
-### Hinweis
+# ### Hinweis
 
-Die Ergebnisse sind eine **realistische Schätzung** und dienen nur zur Orientierung.  
-In der tatsächlichen Abrechnung Ihrer Bank können leichte Abweichungen entstehen, zum Beispiel durch Rundungen oder unterschiedliche Kursdaten.
+# Die Ergebnisse sind eine **realistische Schätzung** und dienen nur zur Orientierung.  
+# In der tatsächlichen Abrechnung Ihrer Bank können leichte Abweichungen entstehen, zum Beispiel durch Rundungen oder unterschiedliche Kursdaten.
 
-Dieses Tool ersetzt **keine steuerliche Beratung**.
+# Dieses Tool ersetzt **keine steuerliche Beratung**.
 
----
+# ---
 
-### Datenschutz
+# ### Datenschutz
 
-Alle Berechnungen erfolgen direkt in Ihrem Browser.  
-Es werden **keine persönlichen Finanzdaten gespeichert**.
+# Alle Berechnungen erfolgen direkt in Ihrem Browser.  
+# Es werden **keine persönlichen Finanzdaten gespeichert**.
 
----
+# ---
 
-# Eingabe Ihrer Daten
-""")
+# # Eingabe Ihrer Daten
+# """)
 
 
 
@@ -612,46 +612,46 @@ st.download_button(
 )
 
 
-st.markdown("## Häufige Fragen (FAQ)")
+# st.markdown("## Häufige Fragen (FAQ)")
 
-with st.expander("Was ist der Sparerpauschbetrag?"):
-    st.write("Der Sparerpauschbetrag ist ein Freibetrag für Kapitalerträge. In Deutschland können derzeit bis zu 1000€ pro Person pro Jahr steuerfrei verdient werden. Erst darüber hinaus fällt Abgeltungssteuer an.")
+# with st.expander("Was ist der Sparerpauschbetrag?"):
+#     st.write("Der Sparerpauschbetrag ist ein Freibetrag für Kapitalerträge. In Deutschland können derzeit bis zu 1000€ pro Person pro Jahr steuerfrei verdient werden. Erst darüber hinaus fällt Abgeltungssteuer an.")
 
-with st.expander("Was bedeutet FIFO beim ETF-Verkauf?"):
-    st.write("FIFO steht für „First-In-First-Out“. Steuerlich gilt in Deutschland, dass beim Verkauf zunächst die zuerst gekauften ETF-Anteile wieder verkauft werden.")
+# with st.expander("Was bedeutet FIFO beim ETF-Verkauf?"):
+#     st.write("FIFO steht für „First-In-First-Out“. Steuerlich gilt in Deutschland, dass beim Verkauf zunächst die zuerst gekauften ETF-Anteile wieder verkauft werden.")
 
-with st.expander("Was ist die Teilfreistellung bei ETFs?"):
-    st.write("Bei Aktien-ETFs sind 30% der Gewinne steuerfrei. Das bedeutet, dass nur 70% des Gewinns tatsächlich versteuert werden müssen.")
+# with st.expander("Was ist die Teilfreistellung bei ETFs?"):
+#     st.write("Bei Aktien-ETFs sind 30% der Gewinne steuerfrei. Das bedeutet, dass nur 70% des Gewinns tatsächlich versteuert werden müssen.")
 
-with st.expander("Was ist die Vorabpauschale?"):
-    st.write("Die Vorabpauschale ist eine jährliche Mindestbesteuerung für thesaurierende Fonds. Sie stellt sicher, dass ein Teil der Erträge auch dann besteuert wird, wenn der Fonds keine Ausschüttungen vornimmt.")
+# with st.expander("Was ist die Vorabpauschale?"):
+#     st.write("Die Vorabpauschale ist eine jährliche Mindestbesteuerung für thesaurierende Fonds. Sie stellt sicher, dass ein Teil der Erträge auch dann besteuert wird, wenn der Fonds keine Ausschüttungen vornimmt.")
 
-with st.expander("Wie genau ist die Steuerberechnung dieses Rechners?"):
-    st.write("Der Rechner verwendet die aktuellen deutschen Steuerregeln und berücksichtigt FIFO, Teilfreistellung, Vorabpauschale, Sparerpauschbetrag und Verlusttopf. Dennoch können in der tatsächlichen Abrechnung Ihrer Bank leichte Abweichungen entstehen.")
+# with st.expander("Wie genau ist die Steuerberechnung dieses Rechners?"):
+#     st.write("Der Rechner verwendet die aktuellen deutschen Steuerregeln und berücksichtigt FIFO, Teilfreistellung, Vorabpauschale, Sparerpauschbetrag und Verlusttopf. Dennoch können in der tatsächlichen Abrechnung Ihrer Bank leichte Abweichungen entstehen.")
 
-with st.expander("Wie komme ich an meine Kaufdaten?"):
-    st.write("Ihr Broker hat üblicherweise eine Postbox in der Sie ausgeführte Aufträge finden können. In diesen Aufträgen finden Sie dann das Kaufdatum, den Stückpreis, sowie die Anzahl der gekauften Anteile.")
-
-
-st.markdown("""
----
-## Impressum
-""")
-
-with st.expander("Impressum"):
-    st.write(
-"""
----
+# with st.expander("Wie komme ich an meine Kaufdaten?"):
+#     st.write("Ihr Broker hat üblicherweise eine Postbox in der Sie ausgeführte Aufträge finden können. In diesen Aufträgen finden Sie dann das Kaufdatum, den Stückpreis, sowie die Anzahl der gekauften Anteile.")
 
 
-Angaben gemäß §5 DDG
+# st.markdown("""
+# ---
+# ## Impressum
+# """)
 
-Name: Dein Name  
-Adresse: Deine Adresse  
-E-Mail: deine@email.de
+# with st.expander("Impressum"):
+#     st.write(
+# """
+# ---
 
-Dieses Projekt ist ein privates Informationsangebot. Alle Berechnungen erfolgen ohne Gewähr.
-""")
+
+# Angaben gemäß §5 DDG
+
+# Name: Dein Name  
+# Adresse: Deine Adresse  
+# E-Mail: deine@email.de
+
+# Dieses Projekt ist ein privates Informationsangebot. Alle Berechnungen erfolgen ohne Gewähr.
+# """)
 
 # online bringen mit website
 
@@ -671,3 +671,9 @@ Dieses Projekt ist ein privates Informationsangebot. Alle Berechnungen erfolgen 
 # neues github?
 # kann man werbung schalten?
 # was muss man mit wernung beachten?
+
+# domain kaufen bei netcup.de
+
+#Datenschutzerklärung
+# cookie banner einbauen
+# Affiliate‑Links
