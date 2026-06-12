@@ -133,7 +133,7 @@ def finde_anteile_ohne_steuer(max_anteile, aktueller_kurs, data, vorabpauschale,
 
 def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, brutto, gewinn, gewinn_teilfreistellung, gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf, gewinn_steuerpflichtig, steuer, netto, gesamtkosten, vorabpauschale, aktueller_kurs):
     # gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft)
-    st.markdown("## Detaillierte Berechnung")
+    # st.markdown("## Detaillierte Berechnung")
 
     # -------------------------------
     # Überblick

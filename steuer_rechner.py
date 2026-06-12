@@ -8,8 +8,19 @@ from datetime import datetime
 
 # st.caption("Kostenloser ETF Steuer Rechner für Deutschland (FIFO, Vorabpauschale, Teilfreistellung)")
 
-# st.markdown("""
-# # ETF Steuer Rechner (Deutschland)
+st.markdown("""
+# ETF Steuer Rechner 
+
+*Hinweis: Die Berechnungen dienen nur zur unverbindlichen Orientierung und stellen keine steuerliche Beratung dar.*
+
+Geben Sie hier Ihre Daten ein um:
+- zu berechnen, **wie viele ETF-Anteile Sie steuerfrei verkaufen können**
+- herauszufinden, **wie viele Anteile Sie verkaufen müssen, um einen bestimmten Nettobetrag zu erhalten**
+- die **voraussichtliche Steuer beim Verkauf von ETFs** zu berechnen
+
+---
+        
+""")
 
 # ---
 
@@ -490,6 +501,8 @@ if berechnungstyp == "Steuer und Netto für bestimmte Anzahl berechnen":
     steuer = gewinn_steuerpflichtig * steuersatz
     netto = brutto - steuer
     st.markdown("### Ergebnis Ihrer Berechnung")
+    st.write("*Hinweis: Die Berechnungen dienen ausschließlich zur unverbindlichen Information und stellen keine steuerliche Beratung dar.*")
+
     
     col1, col2, col3 = st.columns(3)
     col1.metric("Brutto Verkaufserlös", f"{brutto:.2f} €", help="Der Brutto Verkaufserlös entspricht der Anzahl verkaufter Anteile multipliziert mit dem aktuellen Kurs pro Anteil. Er stellt den Gesamtbetrag dar, bevor Steuern abgezogen werden.")
@@ -524,6 +537,8 @@ elif berechnungstyp == "Anteile für gewünschtes Netto berechnen":
     steuer = gewinn_steuerpflichtig * steuersatz
     netto = brutto - steuer
     st.markdown("### Ergebnis Ihrer Berechnung")
+    st.write("*Hinweis: Die Berechnungen dienen ausschließlich zur unverbindlichen Information und stellen keine steuerliche Beratung dar.*")
+
     
     col1, col2, col3 = st.columns(3)
     col1.metric("Benötigte Anteile", f"{anzahl_verkaufen:.0f}", help="Anzahl der ETF-Anteile, die verkauft werden müssen, um den gewünschten Nettoerlös zu erreichen. Diese Anzahl basiert auf dem FIFO-Prinzip, der Vorabpauschale, der Teilfreistellung und dem verfügbaren Sparerpauschbetrag.")
@@ -556,6 +571,8 @@ elif berechnungstyp == "Steuerfrei verkaufbare Anteile":
     netto = brutto - steuer
 
     st.markdown("### Ergebnis Ihrer Berechnung")
+    st.write("*Hinweis: Die Berechnungen dienen ausschließlich zur unverbindlichen Information und stellen keine steuerliche Beratung dar.*")
+
     
     col1, col2, col3 = st.columns(3)
     col1.metric("Steuerfrei verkaufbare Anteile", f"{anzahl_verkaufen:.0f}", help="Anzahl der ETF-Anteile, die verkauft werden können, ohne dass Steuern anfallen. Diese Anzahl basiert auf dem FIFO-Prinzip, der Vorabpauschale, der Teilfreistellung und dem verfügbaren Sparerpauschbetrag.")
@@ -677,3 +694,37 @@ st.download_button(
 #Datenschutzerklärung
 # cookie banner einbauen
 # Affiliate‑Links
+
+
+
+# DSGVO
+# cookie banner einbauen (Borlabs Cookie Cookiebot Complianz
+# Affiliate Links Müssen als Werbung gekennzeichnet sein. Einige Links sind Affiliate-Links. Wenn Du darüber kaufst, erhalte ich eine kleine Provision. Für Dich entstehen keine zusätzlichen Kosten.
+# Haftung: Ergebnisse sind ohne Gewähr -keine Steuerberatung -nur Informationszwecke -keine Haftung für Fehler
+# keine bilder von irgendwo kopieren
+# markenrecht: verletzt domamin irgendeine marke?, prüfen mit DPMA Markenregister
+# Adsensde richtlinien: künstliche Klicks -Clickbait auf Werbung -zu wenig Content -Seiten nur für Werbung ... verboten
+# Screenreader-Kompatibilität
+# zugängliche Navigation
+# ist messbar wie viel traffic ich habe?
+#
+# google fonds richtig laden, Google Fonts lokal hosten nicht direkt von Google laden
+
+
+
+# Gewerbe anmleden (20-60euro) bei arbeitsgeber melden ihk beitreten (kostenlos), einnahmen dokumentieren
+
+
+
+
+# OHNE WERNUNG
+# 1. impressum
+# 2. Datenschutzerklärung
+# Auch ohne Werbung werden Daten verarbeitet, z. B.:
+# Server‑Logs (IP-Adresse)
+# Hosting
+# evtl. Cookies
+# 3. Haftung
+# 4. SSL nutzen!! https statt http
+
+# Plausible nutzen für traffic gucken
