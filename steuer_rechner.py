@@ -5,6 +5,22 @@ import requests
 import yfinance as yf
 from datetime import datetime
 
+st.set_page_config(
+    page_title="ETF Steuer Rechner",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+header {visibility: hidden;}
+footer {visibility: hidden;}
+.stDeployButton {display:none;}
+</style>
+"""
+
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # st.caption("Kostenloser ETF Steuer Rechner für Deutschland (FIFO, Vorabpauschale, Teilfreistellung)")
 
@@ -670,6 +686,8 @@ st.download_button(
 # Dieses Projekt ist ein privates Informationsangebot. Alle Berechnungen erfolgen ohne Gewähr.
 # """)
 
+
+
 # online bringen mit website
 
 # execute with streamlit run test.py
@@ -678,14 +696,10 @@ st.download_button(
 # download der ergebnisse als csv datei anbieten
 # egebnis schöner darstellen
 
-# domain wie etfsteuerrechner.de oder mit bindestrichen
+# domain wie etfsteuerrechner.de oder mit bindestrichen, checke vor kauf ob ok mit dpma markenregister, ist ok 
 
 # reddit post, „Ich habe einen ETF-Steuerrechner gebaut, der FIFO, Vorabpauschale und Freibetrag berücksichtigt.“
 
-# manuell kurs eingeben springt zu aktuell
-
-#impressum
-# neues github?
 # kann man werbung schalten?
 # was muss man mit wernung beachten?
 
