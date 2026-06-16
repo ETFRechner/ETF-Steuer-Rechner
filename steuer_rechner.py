@@ -4,6 +4,7 @@ import streamlit as st
 import requests
 import yfinance as yf
 from datetime import datetime
+from datetime import date
 
 st.set_page_config(
     page_title="ETF Steuer Rechner",
@@ -25,7 +26,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # st.caption("Kostenloser ETF Steuer Rechner für Deutschland (FIFO, Vorabpauschale, Teilfreistellung)")
 
 st.markdown("""
-# ETF Steuer Rechner - [etfsteuerrechner.de](https://etfsteuerrechner.de)
+## ETF Steuer Rechner - [etfsteuerrechner.de](https://etfsteuerrechner.de)
 
 *Hinweis: Die Berechnungen dienen nur zur unverbindlichen Orientierung und stellen keine steuerliche Beratung dar.*
 
@@ -145,7 +146,7 @@ def lade_kursdaten(ticker, startjahr):
     kurs_data = ticker_obj.history(start=f"{startjahr}-01-01")
 
     if kurs_data.empty:
-        st.warning("Die Kursdaten konnten nicht geladen werden. Bitte geben Sie die Kursdaten manuell ein oder versuchen Sie es später erneut.")
+        st.warning("Die Kursdaten konnten nicht geladen werden. Bitte versuchen Sie es erneut. Falls das Problem weiterhin besteht, nutzen Sie die manuelle Eingabeoption.")
         st.stop()
 
     kurs_data["jahr"] = kurs_data.index.year
@@ -161,6 +162,28 @@ def lade_kursdaten(ticker, startjahr):
     jahresstart.columns = ["jahr", "preis_1_jan"]
 
     return jahresstart
+
+
+# --- ZENTRIERTER RESET BUTTON GANZ OBEN ---
+# Drei Spalten: Die mittlere Spalte hält den Button zentriert
+col_left, col_mid, col_right = st.columns([2, 2, 2])
+
+with col_mid:
+    if st.button("🔄 Rechner zurücksetzen", type="secondary", use_container_width=True, help="Löscht alle Eingaben und setzt den Rechner in den Startzustand zurück."):
+        # 1. Alle Einträge im Session State löschen
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        
+        # 2. Caches leeren
+        st.cache_data.clear()
+        
+        # 3. Seite komplett neu laden
+        st.rerun()
+
+# Eine schmale Trennlinie unter dem Reset-Bereich
+st.markdown("<hr style='margin: 12px 0px 8px 0px; height: 1px; border: none; background-color: rgba(128, 128, 128, 0.2);'>", unsafe_allow_html=True)
+# ------------------------------------------
+
 
 manuelle_eingabe = st.checkbox("ETF Daten manuell eingeben (ohne automatische Kurse)", help="Aktivieren Sie diese Option, wenn Sie keinen ETF über die Suche auswählen möchten. In diesem Fall müssen aktueller Kurs und historische Kursdaten selbst eingegeben werden.")
 
@@ -320,12 +343,12 @@ elif upload == "CSV hochladen":
             "Anzahl": st.column_config.NumberColumn(
                 "Anzahl",
                 help="Anzahl der gekauften ETF-Anteile in dieser Transaktion. (z.B. 10.2)",
-                format="%.8f"
+                format="%.5f"
             ),
             "Preis": st.column_config.NumberColumn(
                 "Preis (€)",
                 help="Kaufpreis pro Anteil zum Zeitpunkt der Transaktion. (z.B. 105.34)",
-                format="%.8f"
+                format="%.2f"
             ),
             "Kaufdatum": st.column_config.DateColumn(
                 "Kaufdatum",
@@ -356,45 +379,68 @@ elif upload == "CSV hochladen":
 
 elif upload == "automatische Eingabe für Sparpläne":
 
-    st.write("Hier können Sie Eckdaten genutzter Sparpläne eingeben. bei Änderungen müssen sie eine neue Zeile ergänzen und die Änderung wie ein neuen sparplan ansehen. Beachten Sie, dass diese automatische Schätzung eher ungenau ist, da die genauen kurse beim Kauf nicht bekannt sind. Später können Sie die Daten noch bearbeiten oder ergänzen.")
-    st.write("Es wird empfohlen die Daten als CSV herunterzuladen, um sie später wieder hochladen zu können, ohne sie erneut eingeben zu müssen.")
+    # st.write("Hier können Sie Eckdaten genutzter Sparpläne eingeben. bei Änderungen müssen sie eine neue Zeile ergänzen und die Änderung wie ein neuen Sparplan ansehen. Beachten Sie, dass diese automatische Schätzung eher ungenau ist, da die genauen kurse beim Kauf nicht bekannt sind. Später können Sie die Daten noch bearbeiten oder ergänzen.")
+    st.write("""
+    Hier können Sie die Eckdaten Ihrer genutzten Sparpläne eingeben. 
+    **Wichtig bei Anpassungen Ihres Sparplans:** Falls sich Ihre Sparrate oder der Ausführungstag im Laufe der Zeit geändert haben, legen Sie dafür bitte einfach einen neuen Eintrag mit dem entsprechenden Startdatum an.
+    *Hinweis zur Genauigkeit:* Da der genaue Ausführungszeitpunkt (Uhrzeit) variiert, nutzt diese Schätzung den durchschnittlichen Kurs des Kauftages. Keine Sorge: Alle generierten Kaufdaten können Sie im nächsten Schritt flexibel bearbeiten oder korrigieren.
+    """)
+    if "sparplaene" not in st.session_state:
+        st.session_state.sparplaene = []
 
-    sparplan_data = pd.DataFrame({
-        "Startdatum": [None],
-        "Enddatum": [None],
-        "Sparplanrate": [None],
-        "Ausführungstag": [None]
-    })
+    st.write("Geben Sie hier ihre Daten für Ihren Sparplan ein und fügen Sie ihn mit dem Button 'Sparplan hinzufügen' der Liste Ihrer Sparpläne hinzu. Sie können beliebig viele Sparpläne eingeben. ")
 
-    # passe noch eingabemöglichkeiten an, enddatum automatisch auf heute setzen, ausführungstag nur von 1-28 erlauben, startdatum nicht in der zukunft erlauben, enddatum nicht vor startdatum erlauben, sparplanrate positiv machen
-    sparplan_data = st.data_editor(
-        sparplan_data,
-        num_rows="dynamic",
-        column_config={
-            "Startdatum": st.column_config.DateColumn(
-                "Startdatum",
-                help="Datum, an dem der Sparplan beginnt. (Format: YYYY-MM-DD)"
-            ),
-            "Enddatum": st.column_config.DateColumn(
-                "Enddatum",
-                help="Datum, an dem der Sparplan endet. (Format: YYYY-MM-DD)"
-            ),
-            "Sparplanrate": st.column_config.NumberColumn(
-                "Sparplanrate (€)",
-                help="Monatliche Sparplanrate in Euro. (z.B. 100.00)",
-                format="%.2f"
-            ),
-            "Ausführungstag": st.column_config.NumberColumn(
-                "Ausführungstag",
-                help="Tag des Monats, an dem der Sparplan ausgeführt wird. (z.B. 1)",
-                format="%.0f"
-            ),
-        },
-            use_container_width=True
-        )
-    
+    default_start = date.today().replace(year=date.today().year - 1)
+
+    with st.form("sparplan_form"):
+
+        start = st.date_input("Startdatum", value=default_start, max_value=date.today(), help="Startdatum Ihres Sparplans. Das Datum des ersten Kaufs bestimmt die Reihenfolge der Verkäufe nach dem steuerlichen FIFO-Prinzip, sowie die Anteile der Vorabpauschale.")
+        ende = st.date_input("Enddatum", value=date.today(), help="Das Datum des letzten Kaufs.")
+        rate = st.number_input("Sparplanrate (€)", min_value=100.00, step=10.0, help="Monatliche Sparplanrate in Euro.")
+        tag = st.number_input("Ausführungstag", min_value=1, max_value=28, step=1, help="Tag des Monats, an dem der Sparplan ausgeführt wird. (z. B. 1 oder 15) ")
+
+        submitted = st.form_submit_button("Sparplan hinzufügen")
+
+        if submitted:
+            st.session_state.sparplaene.append({
+                "Startdatum": start,
+                "Enddatum": ende,
+                "Sparplanrate": rate,
+                "Ausführungstag": tag
+            })
+            st.success("Sparplan gespeichert. Sie können einen weiteren hinzufügen.")
+
+    if st.session_state.sparplaene:
+        st.write("### Ihre aktiven Sparpläne:")
+        
+        for index, plan in enumerate(st.session_state.sparplaene):
+            # Container hält alles kompakt zusammen
+            with st.container():
+                # [11, 1] sorgt dafür, dass 92% für Text und 8% für den Button reserviert sind
+                col_text, col_btn = st.columns([11, 1], gap="small", vertical_alignment="center")
+                
+                with col_text:
+                    # Ganz normaler Text ohne 'nowrap' – bricht bei Bedarf sauber um
+                    st.markdown(
+                        f"Monatlich **{plan['Sparplanrate']:.2f} €** am **{plan['Ausführungstag']}.** des Monats "
+                        f"(vom {plan['Startdatum']} bis {plan['Enddatum']})"
+                    )
+                    
+                with col_btn:
+                    # Der Button bleibt stur in seiner rechten Spalte fixiert
+                    if st.button("🗑️", key=f"del_{index}", help="Löschen", use_container_width=True):
+                        st.session_state.sparplaene.pop(index)
+                        st.success("Gelöscht!")
+                        st.rerun()
+            
+            # Die super-schmale Trennlinie direkt darunter
+            st.markdown("<hr style='margin: 4px 0px; height: 1px; border: none; background-color: rgba(128, 128, 128, 0.3);'>", unsafe_allow_html=True)
+
+
+    sparplan_data = pd.DataFrame(st.session_state.sparplaene)
+
     if sparplan_data.isnull().all(axis=1).all():
-        st.warning("Bitte geben Sie mindestens einen Sparplan ein.")
+        st.warning("Bitte fügen Sie mindestens einen Sparplan hinzu.")
         st.stop()
 
     if sparplan_data.isnull().values.any():
@@ -423,30 +469,36 @@ elif upload == "automatische Eingabe für Sparpläne":
         st.stop()
 
     if (sparplan_data["Sparplanrate"] <= 0).any():
-        st.warning("Die Sparrate muss positiv sein.")
+        st.warning("Waählen Sie eine gültige Sparplanrate größer als 0 aus.")
         st.stop()
-
 
     # nutze die daten um mit yahoo die kurse zu finden und die anzahl der gekauften anteile zu berechnen
     data = funktionen.erstelle_kaufhistorie_aus_sparplan(sparplan_data, ticker)
 
-    st.success(f"Es wurden {len(data)} Käufe aus den Sparplänen generiert.")
+    if len(data) == 0:
+        st.warning("Es konnten keine Käufe aus den Sparplänen generiert werden. Bitte überprüfen Sie die eingegebenen Sparplandaten oder geben Sie Ihre Käufe manuell ein.")
+        st.stop()
+    else:
+        st.success(f"Es wurden {len(data)} Käufe aus dem Sparplan / den Sparplänen generiert. Sie können die Daten nun manuell ergänzen oder korrigieren.")
 
     data = data.sort_values("Kaufdatum")
+    data = data.reset_index(drop=True)
+
 
     data = st.data_editor(
         data,
         num_rows="dynamic",
+        hide_index=True,
         column_config={
             "Anzahl": st.column_config.NumberColumn(
                 "Anzahl",
                 help="Anzahl der gekauften ETF-Anteile in dieser Transaktion. (z.B. 10.2)",
-                format="%.8f"
+                format="%.5f"
             ),
             "Preis": st.column_config.NumberColumn(
                 "Preis (€)",
                 help="Kaufpreis pro Anteil zum Zeitpunkt der Transaktion. (z.B. 105.34)",
-                format="%.8f"
+                format="%.2f"
             ),
             "Kaufdatum": st.column_config.DateColumn(
                 "Kaufdatum",
@@ -458,6 +510,8 @@ elif upload == "automatische Eingabe für Sparpläne":
 
 
     data = data.sort_values("Kaufdatum")
+    
+    st.write("Es wird empfohlen die Daten als CSV herunterzuladen, um sie später wieder hochladen zu können, ohne sie erneut eingeben zu müssen.")
 
     st.download_button(
         label="Daten als CSV herunterladen",

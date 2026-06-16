@@ -216,7 +216,7 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
 
     vorab_display = vorabpauschale.rename(columns={
         "jahr": "Kalenderjahr",
-        "vorabpauschale_stueck": "Vorabpauschale pro Anteil (€)"
+        "vorabpauschale_stueck": "Vorabpauschale/Anteil (€)"
     })
 
     st.markdown("""
@@ -340,13 +340,32 @@ def footer(canvas, doc):
 
     canvas.setFont("Helvetica", 9)
 
-    canvas.drawString(
-        2 * cm,
-        1.5 * cm,
-        "Berechnet mit etfsteuerrechner.de – Angaben ohne Gewähr."
+    text = "Berechnet mit etfsteuerrechner.de – Angaben ohne Gewähr."
+    x = 2 * cm
+    y = 1.5 * cm
+
+    canvas.drawString(x, y, text)
+
+    canvas.linkURL(
+        "https://etfsteuerrechner.de",
+        (x, y, x + 200, y + 10),
+        relative=0
     )
 
     canvas.restoreState()
+
+# def footer(canvas, doc):
+#     canvas.saveState()
+
+#     canvas.setFont("Helvetica", 9)
+
+#     canvas.drawString(
+#         2 * cm,
+#         1.5 * cm,
+#         "Berechnet mit etfsteuerrechner.de – Angaben ohne Gewähr."
+#     )
+
+#     canvas.restoreState()
 
 def create_pdf(
     anzahl_verkaufen, max_anteile, bereits_verkauft,
@@ -362,7 +381,14 @@ def create_pdf(
     elements = []
 
     # Titel
-    elements.append(Paragraph("etfsteuerrechner.de – Ergebnis", styles["Title"]))
+    # elements.append(Paragraph("etfsteuerrechner.de – Ergebnis", styles["Title"]))
+    elements.append(
+        Paragraph(
+            '<link href="https://etfsteuerrechner.de">etfsteuerrechner.de</link> – Ergebnis',
+            styles["Title"]
+        )
+    )
+
     elements.append(Spacer(1, 20))
 
     aktueller_besitz = max_anteile - bereits_verkauft
@@ -464,15 +490,15 @@ def create_pdf(
 
     vorab_display = vorabpauschale.rename(columns={
         "jahr": "Kalenderjahr",
-        "vorabpauschale_stueck": "Vorabpauschale pro Anteil (€)"
+        "vorabpauschale_stueck": "Vorabpauschale/Anteil (€)"
     })
 
-    vorab_table = [["Kalenderjahr", "Vorabpauschale pro Anteil (€)"]]
+    vorab_table = [["Kalenderjahr", "Vorabpauschale/Anteil (€)"]]
 
     for _, row in vorab_display.iterrows():
         vorab_table.append([
             f"{row['Kalenderjahr']:.0f}",
-            f"{row['Vorabpauschale pro Anteil (€)']:.4f}"
+            f"{row['Vorabpauschale/Anteil (€)']:.4f}"
         ])
 
     elements.append(Table(vorab_table))
