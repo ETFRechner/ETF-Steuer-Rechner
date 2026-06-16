@@ -1,5 +1,12 @@
 import streamlit as st
 import pandas as pd
+import yfinance as yf
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+import io
+from reportlab.platypus import TableStyle
 
 def bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft):
     rest_zu_verkaufen = anzahl_verkaufen
@@ -146,8 +153,8 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
     aktueller_besitz = max_anteile - bereits_verkauft
     gesamtwert = aktueller_besitz * aktueller_kurs
 
-    col1.metric("Gekaufte Anteile", f"{max_anteile:.0f}")
-    col2.metric("Aktuell im Besitz", f"{aktueller_besitz:.0f}")
+    col1.metric("Gekaufte Anteile", f"{max_anteile:.3f}")
+    col2.metric("Aktuell im Besitz", f"{aktueller_besitz:.3f}")
     col3.metric("Gesamtwert", f"{gesamtwert:.2f}€")
     
 
@@ -163,7 +170,7 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
 
     col1, col2 = st.columns(2)
 
-    col1.metric("Verkaufte Anteile", f"{anzahl_verkaufen:.0f}")
+    col1.metric("Verkaufte Anteile", f"{anzahl_verkaufen:.3f}")
     col2.metric("Kurs bei Verkauf", f"{aktueller_kurs:.2f} €")
     # col3.metric("Gewinn vor Steuern", f"{gewinn:.2f} €")
     
@@ -205,9 +212,20 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
 
     st.markdown("### Berücksichtigte Vorabpauschale")
 
-    st.caption("Vorabpauschale pro Anteil und Jahr")
+    # st.caption("Vorabpauschale pro Anteil und Jahr")
 
-    st.dataframe(vorabpauschale, use_container_width=True)
+    vorab_display = vorabpauschale.rename(columns={
+        "jahr": "Kalenderjahr",
+        "vorabpauschale_stueck": "Vorabpauschale pro Anteil (€)"
+    })
+
+    st.markdown("""
+        Die Tabelle zeigt die jährlich angesetzte Vorabpauschale pro Anteil.  
+        Dieser Wert reduziert den steuerpflichtigen Gewinn beim Verkauf, da darauf bereits Steuer gezahlt wurde.
+        """)
+
+
+    st.dataframe(vorab_display, use_container_width=True)
 
 
 
@@ -259,3 +277,216 @@ def berechne_vorabpauschalen_df(kursdaten, teilfreistellung_quote):
         ergebnisse = pd.DataFrame(ergebnisse)
 
     return ergebnisse
+
+
+def erstelle_kaufhistorie_aus_sparplan(sparplan_data, ticker):
+
+    ticker_obj = yf.Ticker(ticker)
+
+    kaufhistorie = []
+
+    # frühestes Startdatum und spätestes Enddatum bestimmen
+    start_global = pd.to_datetime(sparplan_data["Startdatum"]).min()
+    end_global = pd.to_datetime(sparplan_data["Enddatum"]).max()
+
+    # einmal alle Kursdaten laden
+    kursdaten = ticker_obj.history(start=start_global, end=end_global + pd.Timedelta(days=7))
+
+    kursdaten.index = kursdaten.index.tz_localize(None)
+
+    for _, row in sparplan_data.iterrows():
+
+        startdatum = pd.to_datetime(row["Startdatum"])
+        enddatum = pd.to_datetime(row["Enddatum"])
+        rate = row["Sparplanrate"]
+        ausfuehrungstag = int(row["Ausführungstag"])
+
+        if pd.isna(startdatum) or pd.isna(enddatum) or pd.isna(rate):
+            continue
+
+        # erstes Ausführungsdatum bestimmen
+        if startdatum.day <= ausfuehrungstag:
+            aktuelles_datum = startdatum.replace(day=ausfuehrungstag)
+        else:
+            aktuelles_datum = (startdatum + pd.DateOffset(months=1)).replace(day=ausfuehrungstag)
+
+        while aktuelles_datum <= enddatum:
+
+            # nächsten Handelstag finden
+            daten = kursdaten[kursdaten.index >= aktuelles_datum]
+
+            if daten.empty:
+                break
+
+            # kurs = daten["Close"].iloc[0]
+            kurs = (daten["Open"].iloc[0] + daten["Close"].iloc[0]) / 2
+            kaufdatum_real = daten.index[0]
+
+            anzahl = rate / kurs
+
+            kaufhistorie.append({
+                "Anzahl": anzahl,
+                "Preis": kurs,
+                "Kaufdatum": kaufdatum_real
+            })
+
+            aktuelles_datum += pd.DateOffset(months=1)
+
+    return pd.DataFrame(kaufhistorie)
+
+
+def footer(canvas, doc):
+    canvas.saveState()
+
+    canvas.setFont("Helvetica", 9)
+
+    canvas.drawString(
+        2 * cm,
+        1.5 * cm,
+        "Berechnet mit etfsteuerrechner.de – Angaben ohne Gewähr."
+    )
+
+    canvas.restoreState()
+
+def create_pdf(
+    anzahl_verkaufen, max_anteile, bereits_verkauft,
+    brutto, gewinn, gewinn_teilfreistellung,
+    gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf,
+    gewinn_steuerpflichtig, steuer, netto,
+    gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag
+):
+
+    buffer = io.BytesIO()
+
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # Titel
+    elements.append(Paragraph("etfsteuerrechner.de – Ergebnis", styles["Title"]))
+    elements.append(Spacer(1, 20))
+
+    aktueller_besitz = max_anteile - bereits_verkauft
+    gesamtwert = aktueller_besitz * aktueller_kurs
+    durchschnittlicher_kaufpreis = gesamtkosten / max_anteile
+
+    elements.append(Paragraph("Ergebnis Ihrer Berechnung", styles["Heading2"]))
+    elements.append(Spacer(1, 10))
+
+    ergebnis_data = [
+        [
+            "Steuerfrei verkaufbare Anteile",
+            "Nettoerlös",
+            "Verbleibender Sparerpauschbetrag"
+        ],
+        [
+            f"{anzahl_verkaufen:.0f}",
+            f"{netto:.2f} €",
+            f"{(freibetrag-gewinn_nach_verlusttopf):.2f} €"
+        ]
+    ]
+
+    ergebnis_table = Table(ergebnis_data)
+
+    ergebnis_table.setStyle(TableStyle([
+        ("ALIGN", (0,0), (-1,-1), "CENTER"),
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        # ("LINEBELOW", (0,0), (-1,0), 1, colors.black),
+        ("BOTTOMPADDING", (0,0), (-1,0), 8),
+    ]))
+
+    elements.append(ergebnis_table)
+    elements.append(Spacer(1, 20))
+
+
+    # Überblick
+    elements.append(Paragraph("Überblick Ihrer Position (vor Verkauf)", styles["Heading2"]))
+
+    overview_data = [
+        ["Gekaufte Anteile", f"{max_anteile:.3f}"],
+        ["Aktuell im Besitz", f"{aktueller_besitz:.3f}"],
+        ["Gesamtwert", f"{gesamtwert:.2f} €"],
+        ["Durchschnittlicher Kaufpreis", f"{durchschnittlicher_kaufpreis:.2f} €"]
+    ]
+
+    elements.append(Table(overview_data))
+    elements.append(Spacer(1, 20))
+
+    # Verkaufsübersicht
+    elements.append(Paragraph("Verkaufsübersicht", styles["Heading2"]))
+
+    verkauf_data = [
+        ["Verkaufte Anteile", f"{anzahl_verkaufen:.3f}"],
+        ["Kurs bei Verkauf", f"{aktueller_kurs:.2f} €"]
+    ]
+
+    table = Table(verkauf_data)
+
+    table.setStyle(TableStyle([
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+    ]))
+
+    elements.append(table)
+    elements.append(Spacer(1, 20))
+
+
+
+    # Steuerberechnung
+    elements.append(Paragraph("Steuerberechnung", styles["Heading2"]))
+
+    steuer_data = [
+        ["Berechnungsschritt", "Betrag (€)"],
+        ["Bruttoverkauf", f"{brutto:.2f}"],
+        ["Gewinn vor Steuer", f"{gewinn:.2f}"],
+        ["Nach Teilfreistellung", f"{gewinn_teilfreistellung:.2f}"],
+        ["Nach Vorabpauschale", f"{gewinn_nach_vorabpauschale:.2f}"],
+        ["Nach Verlusttopf", f"{gewinn_nach_verlusttopf:.2f}"],
+        ["Nach Sparerpauschbetrag", f"{gewinn_steuerpflichtig:.2f}"],
+        ["Zu zahlende Steuer", f"{steuer:.2f}"],
+        ["Netto nach Steuern", f"{netto:.2f}"]
+    ]
+
+
+    table = Table(steuer_data)
+
+    table.setStyle(TableStyle([
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+    ]))
+
+    elements.append(table)
+    elements.append(Spacer(1, 20))
+    
+    # elements.append(Table(steuer_data))
+    # elements.append(Spacer(1, 20))
+
+    # Vorabpauschale
+    elements.append(Paragraph("Berücksichtigte Vorabpauschale", styles["Heading2"]))
+
+
+    vorab_display = vorabpauschale.rename(columns={
+        "jahr": "Kalenderjahr",
+        "vorabpauschale_stueck": "Vorabpauschale pro Anteil (€)"
+    })
+
+    vorab_table = [["Kalenderjahr", "Vorabpauschale pro Anteil (€)"]]
+
+    for _, row in vorab_display.iterrows():
+        vorab_table.append([
+            f"{row['Kalenderjahr']:.0f}",
+            f"{row['Vorabpauschale pro Anteil (€)']:.4f}"
+        ])
+
+    elements.append(Table(vorab_table))
+
+
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+
+    doc.build(
+        elements,
+        onFirstPage=footer,
+        onLaterPages=footer
+    )
+
+
+    buffer.seek(0)
+
+    return buffer

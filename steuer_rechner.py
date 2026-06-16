@@ -25,7 +25,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # st.caption("Kostenloser ETF Steuer Rechner für Deutschland (FIFO, Vorabpauschale, Teilfreistellung)")
 
 st.markdown("""
-# ETF Steuer Rechner 
+# ETF Steuer Rechner - [etfsteuerrechner.de](https://etfsteuerrechner.de)
 
 *Hinweis: Die Berechnungen dienen nur zur unverbindlichen Orientierung und stellen keine steuerliche Beratung dar.*
 
@@ -34,9 +34,11 @@ Geben Sie hier Ihre Daten ein um:
 - herauszufinden, **wie viele Anteile Sie verkaufen müssen, um einen bestimmten Nettobetrag zu erhalten**
 - die **voraussichtliche Steuer beim Verkauf von ETFs** zu berechnen
 
+Mehr Informationen auf der Website: <a href="https://etfsteuerrechner.de" target="_blank">etfsteuerrechner.de</a>
+            
 ---
         
-""")
+""", unsafe_allow_html=True)
 
 # ---
 
@@ -238,13 +240,20 @@ if kirchensteuer:
 
     kirchensteuer_bundesland = 0.09 if kirchensteuer_bundesland == "Andere (9%)" else 0.08
 
-
-upload = st.selectbox(
-        "Kaufhistorie eingeben",
-        options=["CSV hochladen", "Käufe manuell eingeben", "CSV hochladen und bearbeiten"],
-        index=1, 
-        help="Laden Sie eine CSV-Datei mit Ihren ETF-Käufen hoch. Die Datei muss die Spalten Kaufdatum, Anzahl und Preis enthalten. Diese Daten sind essentiell für die Steuerberechnung."
-    )
+if manuelle_eingabe:
+    upload = st.selectbox(
+            "Kaufhistorie eingeben",
+            options=["CSV hochladen", "Käufe manuell eingeben"],
+            index=0, 
+            help="Laden Sie eine CSV-Datei mit Ihren ETF-Käufen hoch. Die Datei muss die Spalten Kaufdatum, Anzahl und Preis enthalten. Diese Daten sind essentiell für die Steuerberechnung."
+        )
+else:
+    upload = st.selectbox(
+            "Kaufhistorie eingeben",
+            options=["automatische Eingabe für Sparpläne", "CSV hochladen", "Käufe manuell eingeben"],
+            index=0, 
+            help="Laden Sie eine CSV-Datei mit Ihren ETF-Käufen hoch. Die Datei muss die Spalten Kaufdatum, Anzahl und Preis enthalten. Diese Daten sind essentiell für die Steuerberechnung."
+        )
 
 if upload == "Käufe manuell eingeben":
     st.write("ETF-Käufe manuell eingeben")
@@ -290,53 +299,15 @@ if upload == "Käufe manuell eingeben":
         st.warning("Bitte füllen Sie alle Felder aus, um fortzufahren oder laden Sie eine CSV-Datei mit den Kaufdaten hoch. Falls Sie eine Zeile löschen möchten, klicken Sie links auf den Haken der entsprechenden Zeile und drücken anschließend auf den Mülleimer oben rechts in der Ecke der Tabelle.")
         st.stop()
 
+
 elif upload == "CSV hochladen":
-    uploaded_file = st.file_uploader("CSV hochladen", type="csv", help="CSV-Datei mit Ihren ETF-Käufen hochladen. Die Datei muss die Spalten Kaufdatum, Anzahl und Preis enthalten. Diese Daten werden genutzt, um die Verkaufsreihenfolge nach dem FIFO-Prinzip zu bestimmen und den steuerpflichtigen Gewinn zu berechnen. Falls Sie keine CSV-Datei haben, können Sie Ihre Käufe auch manuell eingeben.")
-
-    beispiel = pd.DataFrame({
-        "Anzahl": [10.0],
-        "Preis": [105.34],
-        "Kaufdatum": [pd.Timestamp("2026-01-01")]
-    })
-
-    st.download_button(
-        label="Beispiel CSV-Datei herunterladen",
-        data=beispiel.to_csv(index=False).encode("utf-8"),
-        file_name="Beispiel_ETF_Käufe.csv",
-        mime="text/csv"
-    )
-
-    if uploaded_file is not None:
-        data = pd.read_csv(uploaded_file)
-        #checken on alle notwendigen spalten vorhanden sind
-        notwendige_spalten = ["Kaufdatum", "Anzahl", "Preis"]
-
-        fehlende_spalten = [s for s in notwendige_spalten if s not in data.columns]
-
-        if fehlende_spalten:
-            st.warning(f"Die CSV-Datei enthält nicht alle benötigten Spalten. Fehlend: {', '.join(fehlende_spalten)}. Falls Sie keine passende CSV-Datei haben, können Sie Ihre Käufe auch manuell eingeben.")
-            st.stop()
-
-        # checken ob es keine leeren werte gibt
-        if data.isnull().values.any():
-            st.warning("Die CSV-Datei enthält leere Werte. Bitte füllen Sie alle Felder aus oder laden Sie eine CSV-Datei ohne fehlende Werte hoch. Alternativ können Sie Ihre Käufe auch manuell eingeben.")
-            st.stop()
-
-    else:
-        st.warning("Bitte laden Sie eine CSV-Datei hoch mit den spalten Kaufdatum, Anzahl und Preis.")
-        data = pd.DataFrame({
-            "Anzahl": [],
-            "Preis": [],
-            "Kaufdatum": []
-        })
-        st.stop()
-
-elif upload == "CSV hochladen und bearbeiten":
 
     uploaded_file = st.file_uploader("CSV hochladen", type="csv", help="CSV-Datei mit Ihren ETF-Käufen hochladen. Die Datei muss die Spalten Kaufdatum, Anzahl und Preis enthalten. Diese Daten werden genutzt, um die Verkaufsreihenfolge nach dem FIFO-Prinzip zu bestimmen und den steuerpflichtigen Gewinn zu berechnen. Falls Sie keine CSV-Datei haben, können Sie Ihre Käufe auch manuell eingeben.")
 
     if uploaded_file is not None:
         data = pd.read_csv(uploaded_file)
+
+        data["Kaufdatum"] = pd.to_datetime(data["Kaufdatum"], errors="coerce")
 
         st.write("Hier können Sie Ihre Käufe manuell ergänzen oder korrigieren. Sie können Zeilen löschen indem Sie links auf den haken drücken und anschließend aud sen mülleimer oben rechts in der ecke der Tabelle drücken")
         st.write("Es wird empfohlen die Daten als CSV herunterzuladen, um sie später wieder hochladen zu können, ohne sie erneut eingeben zu müssen.")
@@ -382,6 +353,122 @@ elif upload == "CSV hochladen und bearbeiten":
             "Kaufdatum": []
         })
         st.stop()
+
+elif upload == "automatische Eingabe für Sparpläne":
+
+    st.write("Hier können Sie Eckdaten genutzter Sparpläne eingeben. bei Änderungen müssen sie eine neue Zeile ergänzen und die Änderung wie ein neuen sparplan ansehen. Beachten Sie, dass diese automatische Schätzung eher ungenau ist, da die genauen kurse beim Kauf nicht bekannt sind. Später können Sie die Daten noch bearbeiten oder ergänzen.")
+    st.write("Es wird empfohlen die Daten als CSV herunterzuladen, um sie später wieder hochladen zu können, ohne sie erneut eingeben zu müssen.")
+
+    sparplan_data = pd.DataFrame({
+        "Startdatum": [None],
+        "Enddatum": [None],
+        "Sparplanrate": [None],
+        "Ausführungstag": [None]
+    })
+
+    # passe noch eingabemöglichkeiten an, enddatum automatisch auf heute setzen, ausführungstag nur von 1-28 erlauben, startdatum nicht in der zukunft erlauben, enddatum nicht vor startdatum erlauben, sparplanrate positiv machen
+    sparplan_data = st.data_editor(
+        sparplan_data,
+        num_rows="dynamic",
+        column_config={
+            "Startdatum": st.column_config.DateColumn(
+                "Startdatum",
+                help="Datum, an dem der Sparplan beginnt. (Format: YYYY-MM-DD)"
+            ),
+            "Enddatum": st.column_config.DateColumn(
+                "Enddatum",
+                help="Datum, an dem der Sparplan endet. (Format: YYYY-MM-DD)"
+            ),
+            "Sparplanrate": st.column_config.NumberColumn(
+                "Sparplanrate (€)",
+                help="Monatliche Sparplanrate in Euro. (z.B. 100.00)",
+                format="%.2f"
+            ),
+            "Ausführungstag": st.column_config.NumberColumn(
+                "Ausführungstag",
+                help="Tag des Monats, an dem der Sparplan ausgeführt wird. (z.B. 1)",
+                format="%.0f"
+            ),
+        },
+            use_container_width=True
+        )
+    
+    if sparplan_data.isnull().all(axis=1).all():
+        st.warning("Bitte geben Sie mindestens einen Sparplan ein.")
+        st.stop()
+
+    if sparplan_data.isnull().values.any():
+        st.warning("Es dürfen keine leeren Werte vorhanden sein. Bitte füllen Sie alle Felder aus oder löschen Sie unvollständige Zeilen.")
+        st.stop()
+
+    sparplan_data["Startdatum"] = pd.to_datetime(sparplan_data["Startdatum"], errors="coerce")
+    sparplan_data["Enddatum"] = pd.to_datetime(sparplan_data["Enddatum"], errors="coerce")
+
+    today = pd.Timestamp.today()
+
+    if (sparplan_data["Ausführungstag"] > 28).any() or (sparplan_data["Ausführungstag"] < 1).any():
+        st.warning("Der Ausführungstag muss zwischen 1 und 28 liegen.")
+        st.stop()
+
+    if (sparplan_data["Startdatum"] > today).any():
+        st.warning("Das Startdatum darf nicht in der Zukunft liegen.")
+        st.stop()
+
+    if (sparplan_data["Enddatum"] > today).any():
+        st.warning("Das Enddatum darf nicht in der Zukunft liegen.")
+        st.stop()
+
+    if (sparplan_data["Enddatum"] < sparplan_data["Startdatum"]).any():
+        st.warning("Das Enddatum muss nach dem Startdatum liegen.")
+        st.stop()
+
+    if (sparplan_data["Sparplanrate"] <= 0).any():
+        st.warning("Die Sparrate muss positiv sein.")
+        st.stop()
+
+
+    # nutze die daten um mit yahoo die kurse zu finden und die anzahl der gekauften anteile zu berechnen
+    data = funktionen.erstelle_kaufhistorie_aus_sparplan(sparplan_data, ticker)
+
+    st.success(f"Es wurden {len(data)} Käufe aus den Sparplänen generiert.")
+
+    data = data.sort_values("Kaufdatum")
+
+    data = st.data_editor(
+        data,
+        num_rows="dynamic",
+        column_config={
+            "Anzahl": st.column_config.NumberColumn(
+                "Anzahl",
+                help="Anzahl der gekauften ETF-Anteile in dieser Transaktion. (z.B. 10.2)",
+                format="%.8f"
+            ),
+            "Preis": st.column_config.NumberColumn(
+                "Preis (€)",
+                help="Kaufpreis pro Anteil zum Zeitpunkt der Transaktion. (z.B. 105.34)",
+                format="%.8f"
+            ),
+            "Kaufdatum": st.column_config.DateColumn(
+                "Kaufdatum",
+                help="Datum, an dem die ETF-Anteile gekauft wurden. Dieses Datum bestimmt die Reihenfolge der Verkäufe nach dem steuerlichen FIFO-Prinzip, sowie die Anteile der Vorabpauschale. (Format: YYYY-MM-DD)",
+            ),
+        },
+        use_container_width=True
+    )
+
+
+    data = data.sort_values("Kaufdatum")
+
+    st.download_button(
+        label="Daten als CSV herunterladen",
+        data=data.to_csv(index=False).encode("utf-8"),
+        file_name="Persönliche_ETF_Käufe.csv",
+        mime="text/csv"
+    )
+
+
+
+
 
 if len(data) == 0:
     st.warning("Bitte geben Sie mindestens einen ETF-Kauf ein.")
@@ -629,20 +716,21 @@ if detailierte_darstellung:
         aktueller_kurs
     )
 
-export_df = pd.DataFrame([st.session_state.results])
-export_df["ETF"] = ticker if not manuelle_eingabe else "manuell"
-export_df["Gesamt Anteile"] = max_anteile
-export_df["Bereits verkaufte Anteile"] = bereits_verkauft
-export_df["Gesamtkosten"] = gesamtkosten
+if "results" in st.session_state:
+    pdf = funktionen.create_pdf(
+        anzahl_verkaufen, max_anteile, bereits_verkauft,
+        brutto, gewinn, gewinn_teilfreistellung,
+        gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf,
+        gewinn_steuerpflichtig, steuer, netto,
+        gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag
+    )
 
-csv = export_df.to_csv(index=False).encode("utf-8")
-
-st.download_button(
-    label="Ergebnisse als CSV herunterladen",
-    data=csv,
-    file_name="ergebnis_steuer_rechner.csv",
-    mime="text/csv"
-)
+    st.download_button(
+        "Ergebnis als PDF herunterladen",
+        pdf,
+        "etf_steuer_berechnung.pdf",
+        "application/pdf"
+    )
 
 
 # st.markdown("## Häufige Fragen (FAQ)")
@@ -688,57 +776,14 @@ st.download_button(
 
 
 
-# online bringen mit website
-
 # execute with streamlit run test.py
-
-
-# download der ergebnisse als csv datei anbieten
-# egebnis schöner darstellen
 
 # domain wie etfsteuerrechner.de oder mit bindestrichen, checke vor kauf ob ok mit dpma markenregister, ist ok 
 
 # reddit post, „Ich habe einen ETF-Steuerrechner gebaut, der FIFO, Vorabpauschale und Freibetrag berücksichtigt.“
 
-# kann man werbung schalten?
-# was muss man mit wernung beachten?
-
 # domain kaufen bei netcup.de
 
-#Datenschutzerklärung
-# cookie banner einbauen
-# Affiliate‑Links
-
-
-
-# DSGVO
-# cookie banner einbauen (Borlabs Cookie Cookiebot Complianz
-# Affiliate Links Müssen als Werbung gekennzeichnet sein. Einige Links sind Affiliate-Links. Wenn Du darüber kaufst, erhalte ich eine kleine Provision. Für Dich entstehen keine zusätzlichen Kosten.
-# Haftung: Ergebnisse sind ohne Gewähr -keine Steuerberatung -nur Informationszwecke -keine Haftung für Fehler
-# keine bilder von irgendwo kopieren
-# markenrecht: verletzt domamin irgendeine marke?, prüfen mit DPMA Markenregister
-# Adsensde richtlinien: künstliche Klicks -Clickbait auf Werbung -zu wenig Content -Seiten nur für Werbung ... verboten
-# Screenreader-Kompatibilität
-# zugängliche Navigation
-# ist messbar wie viel traffic ich habe?
-#
-# google fonds richtig laden, Google Fonts lokal hosten nicht direkt von Google laden
-
-
-
-# Gewerbe anmleden (20-60euro) bei arbeitsgeber melden ihk beitreten (kostenlos), einnahmen dokumentieren
-
-
-
-
-# OHNE WERNUNG
-# 1. impressum
-# 2. Datenschutzerklärung
-# Auch ohne Werbung werden Daten verarbeitet, z. B.:
-# Server‑Logs (IP-Adresse)
-# Hosting
-# evtl. Cookies
-# 3. Haftung
-# 4. SSL nutzen!! https statt http
-
 # Plausible nutzen für traffic gucken
+
+

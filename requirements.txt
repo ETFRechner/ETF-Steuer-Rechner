@@ -4,3 +4,5 @@ numpy
 yfinance
 datetime
 requests
+reportlab
+io
