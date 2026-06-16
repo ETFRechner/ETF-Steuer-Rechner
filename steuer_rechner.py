@@ -26,7 +26,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # st.caption("Kostenloser ETF Steuer Rechner für Deutschland (FIFO, Vorabpauschale, Teilfreistellung)")
 
 st.markdown("""
-## ETF Steuer Rechner - [etfsteuerrechner.de](https://etfsteuerrechner.de)
+## ETF Steuer Rechner - [etfsteuerrechner.de](https://www.etfsteuerrechner.de)
 
 *Hinweis: Die Berechnungen dienen nur zur unverbindlichen Orientierung und stellen keine steuerliche Beratung dar.*
 
@@ -35,7 +35,7 @@ Geben Sie hier Ihre Daten ein um:
 - herauszufinden, **wie viele Anteile Sie verkaufen müssen, um einen bestimmten Nettobetrag zu erhalten**
 - die **voraussichtliche Steuer beim Verkauf von ETFs** zu berechnen
 
-Mehr Informationen auf der Website: <a href="https://etfsteuerrechner.de" target="_blank">etfsteuerrechner.de</a>
+Mehr Informationen auf der Website: <a href="https://www.etfsteuerrechner.de" target="_blank">etfsteuerrechner.de</a>
             
 ---
         

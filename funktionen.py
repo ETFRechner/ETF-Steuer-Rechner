@@ -347,7 +347,7 @@ def footer(canvas, doc):
     canvas.drawString(x, y, text)
 
     canvas.linkURL(
-        "https://etfsteuerrechner.de",
+        "https://www.etfsteuerrechner.de",
         (x, y, x + 200, y + 10),
         relative=0
     )
@@ -384,7 +384,7 @@ def create_pdf(
     # elements.append(Paragraph("etfsteuerrechner.de – Ergebnis", styles["Title"]))
     elements.append(
         Paragraph(
-            '<link href="https://etfsteuerrechner.de">etfsteuerrechner.de</link> – Ergebnis',
+            '<link href="https://www.etfsteuerrechner.de">etfsteuerrechner.de</link> – Ergebnis',
             styles["Title"]
         )
     )
