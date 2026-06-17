@@ -8,6 +8,13 @@ from reportlab.lib.units import cm
 import io
 from reportlab.platypus import TableStyle
 
+def eur(x):
+    return f"{x:.2f}".replace(".", ",") + " €"
+
+def anteil(x):
+    return f"{x:.5f}".replace(".", ",")
+
+
 def bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft):
     rest_zu_verkaufen = anzahl_verkaufen
     gewinn = 0
@@ -22,8 +29,6 @@ def bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bere
         anzahl = row["Anzahl"]
         kaufpreis = row["Preis"]
         datum = row["Kaufdatum"]
-
-        # print(bereits_verkauft, anzahl, datum)
 
         if bereits_verkauft > 0:
             if anzahl <= bereits_verkauft:
@@ -59,8 +64,10 @@ def bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bere
             vorabpauschale_anteil = vorabpauschale_stueck * monate_gehalten_im_Jahr / 12
             gesamte_vorabpauschale += vorabpauschale_anteil * zu_verkaufen 
     
-    if rest_zu_verkaufen -0.000001 > 0:
-        raise ValueError("Nicht genug Anteile vorhanden")
+    if rest_zu_verkaufen > 1e-6:
+        st.warning(f"Sie verfügen nicht über ausreichend Anteile für das gewünschte Netto.")
+        st.stop()
+        # raise ValueError("Nicht genug Anteile vorhanden")
 
         
     return gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen
@@ -89,54 +96,67 @@ def bestimme_steuerpflichtigen_gewinnn(gewinn, teilfreistellung_quote, gesamte_v
 
 def finde_anteile(ziel_netto, max_anteile, aktueller_kurs, data, vorabpauschale, bereits_verkauft, steuersatz, teilfreistellung_quote, verlusttopf, freibetrag):
 
-    low = 0
-    high = max_anteile
+    low = 0.0
+    high = float(max_anteile)
 
-    while low <= high:
+    for _ in range(60):   # genügend Iterationen für hohe Genauigkeit
 
-        mid = (low + high) // 2
-        # netto = berechne_netto(mid)
-        gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(mid, aktueller_kurs, data, vorabpauschale, bereits_verkauft)
-        netto = bestimme_netto(brutto, gewinn, steuersatz, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag)
+        mid = (low + high) / 2
 
-        if abs(netto - ziel_netto) < 1:
-            return mid
+        gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(
+            mid, aktueller_kurs, data, vorabpauschale, bereits_verkauft
+        )
+
+        netto = bestimme_netto(
+            brutto, gewinn, steuersatz, teilfreistellung_quote,
+            gesamte_vorabpauschale, verlusttopf, freibetrag
+        )
+
+        if abs(netto - ziel_netto) < 0.000001:
+            return round(mid, 6)
 
         if netto < ziel_netto:
-            low = mid + 1
+            low = mid
         else:
-            high = mid - 1
+            high = mid
 
-    return low
+    return round(mid, 6)
 
 def finde_anteile_ohne_steuer(max_anteile, aktueller_kurs, data, vorabpauschale, bereits_verkauft, steuersatz, teilfreistellung_quote, verlusttopf, freibetrag):
-    low = 0
-    high = max_anteile
 
-    # checken ob überhaupt steuern gezahlt werden müssen
-    gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(high, aktueller_kurs, data, vorabpauschale, bereits_verkauft)
-    # st.write(f"Gewinn bei Verkauf aller Anteile: {rest_zu_verkaufen}€")
-    steuerpflichtiger_gewinn = bestimme_steuerpflichtigen_gewinnn(gewinn, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag)
-    if steuerpflichtiger_gewinn == 0:
-        return high
+    low = 0.0
+    high = float(max_anteile)
 
-    while low <= high:
+    # prüfen ob überhaupt Steuern entstehen
+    gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(
+        high, aktueller_kurs, data, vorabpauschale, bereits_verkauft
+    )
 
-        mid = (low + high) // 2
-   
-        gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(mid, aktueller_kurs, data, vorabpauschale, bereits_verkauft)
-        steuerpflichtiger_gewinn = bestimme_steuerpflichtigen_gewinnn(gewinn, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag)
+    steuerpflichtiger_gewinn = bestimme_steuerpflichtigen_gewinnn(
+        gewinn, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag
+    )
 
-        if abs(low - high) <= 1:
-            return mid
+    for _ in range(100):
+
+        mid = (low + high) / 2
+
+        gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(
+            mid, aktueller_kurs, data, vorabpauschale, bereits_verkauft
+        )
+
+        steuerpflichtiger_gewinn = bestimme_steuerpflichtigen_gewinnn(
+            gewinn, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag
+        )
+
+        if abs(high - low) < 0.000001:
+            return round(mid, 6)
 
         if steuerpflichtiger_gewinn > 0:
-            high = mid - 1
+            high = mid
         else:
-            low = mid 
-        
-    return low
+            low = mid
 
+    return round(mid, 6)
 
 def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, brutto, gewinn, gewinn_teilfreistellung, gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf, gewinn_steuerpflichtig, steuer, netto, gesamtkosten, vorabpauschale, aktueller_kurs):
     # gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft)
@@ -153,14 +173,13 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
     aktueller_besitz = max_anteile - bereits_verkauft
     gesamtwert = aktueller_besitz * aktueller_kurs
 
-    col1.metric("Gekaufte Anteile", f"{max_anteile:.3f}")
-    col2.metric("Aktuell im Besitz", f"{aktueller_besitz:.3f}")
-    col3.metric("Gesamtwert", f"{gesamtwert:.2f}€")
-    
+    col1.metric("Gekaufte Anteile", f"{anteil(max_anteile)}")
+    col2.metric("Aktuell im Besitz", f"{anteil(aktueller_besitz)}")
+    col3.metric("Gesamtwert", f"{eur(gesamtwert)}")
 
     durchschnittlicher_kaufpreis = gesamtkosten / max_anteile
 
-    st.caption(f"Durchschnittlicher Kaufpreis: {durchschnittlicher_kaufpreis:.2f} €")
+    st.caption(f"Durchschnittlicher Kaufpreis: {eur(durchschnittlicher_kaufpreis)} pro Anteil")
 
     # -------------------------------
     # Verkaufsübersicht
@@ -170,9 +189,9 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
 
     col1, col2 = st.columns(2)
 
-    col1.metric("Verkaufte Anteile", f"{anzahl_verkaufen:.3f}")
-    col2.metric("Kurs bei Verkauf", f"{aktueller_kurs:.2f} €")
-    # col3.metric("Gewinn vor Steuern", f"{gewinn:.2f} €")
+    col1.metric("Verkaufte Anteile", f"{anteil(anzahl_verkaufen)}")
+    col2.metric("Kurs bei Verkauf", f"{eur(aktueller_kurs)}")
+    # col3.metric("Gewinn vor Steuern", f"{eur(gewinn)}")
     
 
     # -------------------------------
@@ -192,15 +211,15 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
             "Zu zahlende Steuer",
             "Netto nach Steuern"
         ],
-        "Betrag (€)": [
-            f"{brutto:.2f}",
-            f"{gewinn:.2f}",
-            f"{gewinn_teilfreistellung:.2f}",
-            f"{gewinn_nach_vorabpauschale:.2f}",
-            f"{gewinn_nach_verlusttopf:.2f}",
-            f"{gewinn_steuerpflichtig:.2f}",
-            f"{steuer:.2f}",
-            f"{netto:.2f}"
+        "Betrag": [
+            f"{eur(brutto)}",
+            f"{eur(gewinn)}",
+            f"{eur(gewinn_teilfreistellung)}",
+            f"{eur(gewinn_nach_vorabpauschale)}",
+            f"{eur(gewinn_nach_verlusttopf)}",
+            f"{eur(gewinn_steuerpflichtig)}",
+            f"{eur(steuer)}",
+            f"{eur(netto)}"
         ]
     })
 
@@ -218,6 +237,12 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
         "jahr": "Kalenderjahr",
         "vorabpauschale_stueck": "Vorabpauschale/Anteil (€)"
     })
+
+    vorab_display["Vorabpauschale/Anteil (€)"] = (
+        vorab_display["Vorabpauschale/Anteil (€)"]
+        .map(lambda x: f"{x:.5f}".replace(".", ","))
+    )
+    
 
     st.markdown("""
         Die Tabelle zeigt die jährlich angesetzte Vorabpauschale pro Anteil.  
@@ -262,10 +287,6 @@ def berechne_vorabpauschalen_df(kursdaten, teilfreistellung_quote):
 
         ergebnisse.append({
             "jahr": jahr,
-            # "preis_1_jan": preis_1_jan,
-            # "preis_31_dez": preis_31_dez,
-            # "wertsteigerung": wertsteigerung,
-            # "basiszins": basiszins,
             "vorabpauschale_stueck": vorabpauschale * (1 - teilfreistellung_quote)
         })
 
@@ -354,34 +375,24 @@ def footer(canvas, doc):
 
     canvas.restoreState()
 
-# def footer(canvas, doc):
-#     canvas.saveState()
-
-#     canvas.setFont("Helvetica", 9)
-
-#     canvas.drawString(
-#         2 * cm,
-#         1.5 * cm,
-#         "Berechnet mit etfsteuerrechner.de – Angaben ohne Gewähr."
-#     )
-
-#     canvas.restoreState()
 
 def create_pdf(
     anzahl_verkaufen, max_anteile, bereits_verkauft,
     brutto, gewinn, gewinn_teilfreistellung,
     gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf,
     gewinn_steuerpflichtig, steuer, netto,
-    gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag
+    gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name
 ):
+
+    aktueller_besitz = max_anteile - bereits_verkauft
+    gesamtwert = aktueller_besitz * aktueller_kurs
+    durchschnittlicher_kaufpreis = gesamtkosten / max_anteile if max_anteile else 0
 
     buffer = io.BytesIO()
 
     styles = getSampleStyleSheet()
     elements = []
 
-    # Titel
-    # elements.append(Paragraph("etfsteuerrechner.de – Ergebnis", styles["Title"]))
     elements.append(
         Paragraph(
             '<link href="https://www.etfsteuerrechner.de">etfsteuerrechner.de</link> – Ergebnis',
@@ -391,23 +402,26 @@ def create_pdf(
 
     elements.append(Spacer(1, 20))
 
-    aktueller_besitz = max_anteile - bereits_verkauft
-    gesamtwert = aktueller_besitz * aktueller_kurs
-    durchschnittlicher_kaufpreis = gesamtkosten / max_anteile
+    # ---------------------------------------------------
+    # Überblick Position
+    # ---------------------------------------------------
 
-    elements.append(Paragraph("Ergebnis Ihrer Berechnung", styles["Heading2"]))
+    elements.append(Paragraph("Überblick Ihrer Position (vor Verkauf)", styles["Heading2"]))
     elements.append(Spacer(1, 10))
+
+    elements.append(Paragraph(f"<b>ETF:</b> {etf_name}", styles["Normal"]))
+    elements.append(Spacer(1, 6))
 
     ergebnis_data = [
         [
-            "Steuerfrei verkaufbare Anteile",
-            "Nettoerlös",
-            "Verbleibender Sparerpauschbetrag"
+            "Anzahl Anteile im Besitz",
+            "Kurs pro Anteil",
+            "Gesamtwert der Anteile"
         ],
         [
-            f"{anzahl_verkaufen:.0f}",
-            f"{netto:.2f} €",
-            f"{(freibetrag-gewinn_nach_verlusttopf):.2f} €"
+            f"{anteil(aktueller_besitz)}",
+            f"{eur(aktueller_kurs)}",
+            f"{eur(gesamtwert)}"
         ]
     ]
 
@@ -416,93 +430,132 @@ def create_pdf(
     ergebnis_table.setStyle(TableStyle([
         ("ALIGN", (0,0), (-1,-1), "CENTER"),
         ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-        # ("LINEBELOW", (0,0), (-1,0), 1, colors.black),
         ("BOTTOMPADDING", (0,0), (-1,0), 8),
     ]))
 
     elements.append(ergebnis_table)
+    elements.append(Spacer(1, 8))
+
+    # Zusatzinfos
+    elements.append(
+        Paragraph(
+            f"<font size=9>"
+            f"Gekaufet Anteile: <b>{anteil(max_anteile)}</b> &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"Davon verkauft: <b>{anteil(bereits_verkauft)}</b> &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"Durchschnittlicher Kaufpreis: <b>{eur(durchschnittlicher_kaufpreis)}</b>"
+            f"</font>",
+            styles["Normal"]
+        )
+    )
+
     elements.append(Spacer(1, 20))
 
-
-    # Überblick
-    elements.append(Paragraph("Überblick Ihrer Position (vor Verkauf)", styles["Heading2"]))
-
-    overview_data = [
-        ["Gekaufte Anteile", f"{max_anteile:.3f}"],
-        ["Aktuell im Besitz", f"{aktueller_besitz:.3f}"],
-        ["Gesamtwert", f"{gesamtwert:.2f} €"],
-        ["Durchschnittlicher Kaufpreis", f"{durchschnittlicher_kaufpreis:.2f} €"]
-    ]
-
-    elements.append(Table(overview_data))
-    elements.append(Spacer(1, 20))
-
+    # ---------------------------------------------------
     # Verkaufsübersicht
-    elements.append(Paragraph("Verkaufsübersicht", styles["Heading2"]))
+    # ---------------------------------------------------
+
+    elements.append(Paragraph("Infos über Verkauf", styles["Heading2"]))
+    elements.append(Spacer(1, 10))
 
     verkauf_data = [
-        ["Verkaufte Anteile", f"{anzahl_verkaufen:.3f}"],
-        ["Kurs bei Verkauf", f"{aktueller_kurs:.2f} €"]
+        [
+            "Anzahl zu verkaufender Anteile",
+            "Brutto Verkaufserlös",
+            "Netto nach Steuern"
+        ],
+        [
+            f"{anteil(anzahl_verkaufen)}",
+            f"{eur(brutto)}",
+            f"{eur(netto)}"
+        ]
     ]
 
-    table = Table(verkauf_data)
+    verkauf_table = Table(verkauf_data)
 
-    table.setStyle(TableStyle([
-        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+    verkauf_table.setStyle(TableStyle([
+        ("ALIGN", (0,0), (-1,-1), "CENTER"),
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("BOTTOMPADDING", (0,0), (-1,0), 8),
     ]))
 
-    elements.append(table)
+    elements.append(verkauf_table)
+    elements.append(Spacer(1, 12))
+
+    # Zusatzinfos Verkauf
+    elements.append(
+        Paragraph(
+            f"<font size=9>"
+            f"Gewinn aus Verkauf: <b>{eur(gewinn)}</b> &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"Ungenutzter Sparerpauschbetrag: <b>{eur(max(0, freibetrag - gewinn_nach_verlusttopf))}</b>"
+            f"</font>",
+            styles["Normal"]
+        )
+    )
+
+
     elements.append(Spacer(1, 20))
 
-
-
+    # ---------------------------------------------------
     # Steuerberechnung
+    # ---------------------------------------------------
+
     elements.append(Paragraph("Steuerberechnung", styles["Heading2"]))
+    elements.append(Spacer(1, 10))
 
     steuer_data = [
-        ["Berechnungsschritt", "Betrag (€)"],
-        ["Bruttoverkauf", f"{brutto:.2f}"],
-        ["Gewinn vor Steuer", f"{gewinn:.2f}"],
-        ["Nach Teilfreistellung", f"{gewinn_teilfreistellung:.2f}"],
-        ["Nach Vorabpauschale", f"{gewinn_nach_vorabpauschale:.2f}"],
-        ["Nach Verlusttopf", f"{gewinn_nach_verlusttopf:.2f}"],
-        ["Nach Sparerpauschbetrag", f"{gewinn_steuerpflichtig:.2f}"],
-        ["Zu zahlende Steuer", f"{steuer:.2f}"],
-        ["Netto nach Steuern", f"{netto:.2f}"]
+        ["Berechnungsschritt", "Betrag"],
+        ["Brutto Verkaufserlös", eur(brutto)],
+        ["Gewinn vor Steuern", eur(gewinn)],
+        ["Gewinn nach Teilfreistellung", eur(gewinn_teilfreistellung)],
+        ["Nach Abzug Vorabpauschale", eur(gewinn_nach_vorabpauschale)],
+        ["Nach Verlustverrechnung", eur(gewinn_nach_verlusttopf)],
+        ["Steuerpflichtiger Gewinn", eur(gewinn_steuerpflichtig)],
+        ["Zu zahlende Steuer", eur(steuer)],
+        ["Netto nach Steuern", eur(netto)],
     ]
 
+    steuer_table = Table(steuer_data, colWidths=[280,120])
 
-    table = Table(steuer_data)
-
-    table.setStyle(TableStyle([
-        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+    steuer_table.setStyle(TableStyle([
+        ("ALIGN", (1,0), (-1,-1), "RIGHT"),   # ganze Betrag-Spalte rechts
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("BOTTOMPADDING", (0,0), (-1,0), 8),
     ]))
 
-    elements.append(table)
+    elements.append(steuer_table)
+    elements.append(Spacer(1, 10))
+
+
+
     elements.append(Spacer(1, 20))
-    
-    # elements.append(Table(steuer_data))
-    # elements.append(Spacer(1, 20))
 
-    # Vorabpauschale
-    elements.append(Paragraph("Berücksichtigte Vorabpauschale", styles["Heading2"]))
+    # ---------------------------------------------------
+    # Vorabpauschale Tabelle
+    # ---------------------------------------------------
+
+    if vorabpauschale is not None and len(vorabpauschale) > 0:
+
+        elements.append(Paragraph("Vorabpauschale pro Anteil", styles["Heading2"]))
+        elements.append(Spacer(1, 10))
+
+        data = [["Kalenderjahr", "Vorabpauschale pro Anteil"]]
+
+        for _, row in vorabpauschale.iterrows():
+            data.append([
+                f"{row['jahr']:.0f}",
+                eur(row["vorabpauschale_stueck"])
+            ])
+
+        table = Table(data, colWidths=[150,200])
+
+        table.setStyle(TableStyle([
+            ("ALIGN", (1,0), (-1,-1), "RIGHT"),   # ganze Betrag-Spalte rechts
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("BOTTOMPADDING", (0,0), (-1,0), 8),
+        ]))
 
 
-    vorab_display = vorabpauschale.rename(columns={
-        "jahr": "Kalenderjahr",
-        "vorabpauschale_stueck": "Vorabpauschale/Anteil (€)"
-    })
-
-    vorab_table = [["Kalenderjahr", "Vorabpauschale/Anteil (€)"]]
-
-    for _, row in vorab_display.iterrows():
-        vorab_table.append([
-            f"{row['Kalenderjahr']:.0f}",
-            f"{row['Vorabpauschale/Anteil (€)']:.4f}"
-        ])
-
-    elements.append(Table(vorab_table))
-
+        elements.append(table)
 
     doc = SimpleDocTemplate(buffer, pagesize=A4)
 
@@ -516,3 +569,4 @@ def create_pdf(
     buffer.seek(0)
 
     return buffer
+

@@ -1,4 +1,5 @@
 streamlit
+fstreamlit_searchbox
 pandas
 numpy
 yfinance
