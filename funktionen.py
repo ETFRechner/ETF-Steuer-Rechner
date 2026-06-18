@@ -158,7 +158,7 @@ def finde_anteile_ohne_steuer(max_anteile, aktueller_kurs, data, vorabpauschale,
 
     return round(mid, 6)
 
-def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, brutto, gewinn, gewinn_teilfreistellung, gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf, gewinn_steuerpflichtig, steuer, netto, gesamtkosten, vorabpauschale, aktueller_kurs, verlusttopf_nach_verkauf):
+def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, brutto, gewinn, gewinn_teilfreistellung, gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf, gewinn_steuerpflichtig, steuer, netto, gesamtkosten, vorabpauschale, aktueller_kurs, verlusttopf_nach_verkauf, gesamte_vorabpauschale):
     # gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft)
     # st.markdown("## Detaillierte Berechnung")
 
@@ -205,6 +205,7 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
             "Bruttoverkauf",
             "Gewinn vor Steuer",
             "Nach Teilfreistellung",
+            "Abzuziehende Vorabpauschale",
             "Nach Vorabpauschale",
             "Nach Verlusttopf",
             "Nach Sparerpauschbetrag",
@@ -215,6 +216,7 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
             f"{eur(brutto)}",
             f"{eur(gewinn)}",
             f"{eur(max(0, gewinn_teilfreistellung))}",
+            f"{eur(gesamte_vorabpauschale)}",
             f"{eur(gewinn_nach_vorabpauschale)}",
             f"{eur(gewinn_nach_verlusttopf)}",
             f"{eur(gewinn_steuerpflichtig)}",
@@ -235,24 +237,21 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
 
     vorab_display = vorabpauschale.rename(columns={
         "jahr": "Kalenderjahr",
-        "vorabpauschale_stueck": "Vorabpauschale/Anteil (€)"
+        "vorabpauschale_stueck": "VAP/Anteil (€) (inkl. TF)"
     })
 
-    vorab_display["Vorabpauschale/Anteil (€)"] = (
-        vorab_display["Vorabpauschale/Anteil (€)"]
+    vorab_display["VAP/Anteil (€) (inkl. TF)"] = (
+        vorab_display["VAP/Anteil (€) (inkl. TF)"]
         .map(lambda x: f"{x:.5f}".replace(".", ","))
     )
     
 
     st.markdown("""
-        Die Tabelle zeigt die jährlich angesetzte Vorabpauschale pro Anteil.  
+        Die Tabelle zeigt die jährlich angesetzte Vorabpauschale (VAP) pro Anteil. Die Teilfreistellung (TF) ist dabei bereits berücksichtigt.
         Dieser Wert reduziert den steuerpflichtigen Gewinn beim Verkauf, da darauf bereits Steuer gezahlt wurde.
         """)
 
-
     st.dataframe(vorab_display, use_container_width=True)
-
-
 
 
 @st.cache_data
@@ -381,7 +380,7 @@ def create_pdf(
     brutto, gewinn, gewinn_teilfreistellung,
     gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf,
     gewinn_steuerpflichtig, steuer, netto,
-    gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name, verlusttopf_nach_verkauf
+    gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name, verlusttopf_nach_verkauf, gesamte_vorabpauschale
 ):
 
     aktueller_besitz = max_anteile - bereits_verkauft
@@ -516,6 +515,7 @@ def create_pdf(
         ["Brutto Verkaufserlös", eur(brutto)],
         ["Gewinn vor Steuern", eur(gewinn)],
         ["Gewinn nach Teilfreistellung", eur(max(0, gewinn_teilfreistellung))],
+        ["Abzuziehende Vorabpauschale", eur(gesamte_vorabpauschale)],
         ["Nach Abzug Vorabpauschale", eur(gewinn_nach_vorabpauschale)],
         ["Nach Verlustverrechnung", eur(gewinn_nach_verlusttopf)],
         ["Steuerpflichtiger Gewinn", eur(gewinn_steuerpflichtig)],
@@ -547,7 +547,7 @@ def create_pdf(
         elements.append(Paragraph("Vorabpauschale pro Anteil", styles["Heading2"]))
         elements.append(Spacer(1, 10))
 
-        data = [["Kalenderjahr", "Vorabpauschale pro Anteil"]]
+        data = [["Kalenderjahr", "Vorabpauschale pro Anteil (inkl. Teilfreistellung)"]]
 
         for _, row in vorabpauschale.iterrows():
             data.append([

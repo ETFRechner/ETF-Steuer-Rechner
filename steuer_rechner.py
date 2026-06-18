@@ -262,18 +262,23 @@ else:
         try:
             preis = funktionen.lade_preis(ticker)
             # preis = ticker_obj.fast_info["lastPrice"]
+            kurs_ändern = True
         except:
             st.warning("Der aktuelle Kurs konnte nicht geladen werden. Bitte geben Sie den Kurs manuell ein.")
-            st.stop()
+            kurs_ändern = False
+            kursoptionen = True
+
     else:
         st.warning("Bitte wählen Sie einen ETF aus, um den aktuellen Kurs automatisch zu laden, oder aktivieren Sie die Option 'Verkaufskurs manuell festlegen', um einen eigenen Kurs einzugeben.")
         st.stop()
 
-    kursoptionen = st.checkbox("Verkaufskurs manuell festlegen", help="Aktivieren Sie diese Option, um einen eigenen Verkaufskurs zu simulieren. Dies ist nützlich, wenn Sie berechnen möchten, wie sich Steuern bei einem zukünftigen Kurs verändern.")
+    if kurs_ändern:
+        kursoptionen = st.checkbox("Verkaufskurs manuell festlegen", help="Aktivieren Sie diese Option, um einen eigenen Verkaufskurs zu simulieren. Dies ist nützlich, wenn Sie berechnen möchten, wie sich Steuern bei einem zukünftigen Kurs verändern.")
 
     if kursoptionen:
         aktueller_kurs = st.number_input("Verkaufskurs (€)", value=100.00, format="%.2f", help="Aktueller Verkaufskurs eines ETF-Anteils. Dieser Wert bestimmt den Erlös beim Verkauf. Wenn Sie einen ETF über die Suche auswählen, wird der Kurs automatisch geladen. Alternativ können Sie einen eigenen Verkaufskurs eingeben.")
-        st.write(f"Aktueller Marktpreis: {preis:.2f}€")
+        if kurs_ändern:
+            st.write(f"Aktueller Marktpreis: {preis:.2f}€")
     else:
         aktueller_kurs = preis
         st.success(f"Aktueller Marktpreis: {aktueller_kurs:.2f}€. Dieser Wert wird als Verkaufskurs für die Berechnung verwendet.")
@@ -597,7 +602,7 @@ if data.isnull().values.any():
     st.stop()
 
 if not eingabe_optionen == "CSV‑Export von Trade Republic":
-    bereits_verkauft = st.number_input("Anzahl bereits verkaufter Anteile (für FIFO-Berechnung)", value=0, help="Gesamtzahl der Anteile, die Sie aus diesem ETF bereits verkauft haben. Der Rechner nutzt diese Information für die FIFO-Berechnung (First-In-First-Out), da steuerlich immer die zuerst gekauften Anteile zuerst verkauft werden.")
+    bereits_verkauft = st.number_input("Anzahl bereits verkaufter Anteile (für FIFO-Berechnung)", value=0.00000, format="%.5f",help="Gesamtzahl der Anteile, die Sie aus diesem ETF bereits verkauft haben. Der Rechner nutzt diese Information für die FIFO-Berechnung (First-In-First-Out), da steuerlich immer die zuerst gekauften Anteile zuerst verkauft werden.")
 
 max_anteile = data["Anzahl"].sum()
 
@@ -653,7 +658,9 @@ if thesaurierend:
 
         ohne_vorabpauschale = st.checkbox("Ohne Vorabpauschale rechnen", value=True, help="Wenn diese Option aktiviert ist, wird keine Vorabpauschale berücksichtigt. Dadurch kann die Steuerberechnung weniger genau sein. Die Vorabpauschale wird normalerweise jährlich von der Bank berechnet und von den zu zahlenden Steuern abgezogen.")
 
-        if ohne_vorabpauschale:
+        aktuelles_jahr = datetime.today().year
+
+        if ohne_vorabpauschale or startjahr == aktuelles_jahr:
             vorabpauschale = pd.DataFrame(columns=["jahr", "vorabpauschale_stueck"])
         else:
             jahre = list(range(startjahr, heute + 1))
@@ -678,7 +685,7 @@ if thesaurierend:
                     "preis_1_jan": st.column_config.NumberColumn(
                         "Kurs am 1.1. (€)",
                         help="Kurs des ETFs am ersten Handelstag des Jahres. Dieser Wert wird benötigt, um die Vorabpauschale für dieses Jahr zu berechnen. (z.B. 105.34)",
-                        format="%.6f"
+                        format="%.2f"
                     ),
                 },
                 use_container_width=True
@@ -718,6 +725,7 @@ if berechnungstyp == "Steuer und Netto für bestimmte Anzahl berechnen":
     steuer = gewinn_steuerpflichtig * steuersatz
     netto = brutto - steuer
     st.markdown("### Ergebnis Ihrer Berechnung")
+
     
     st.write("*Hinweis: Die Berechnungen dienen ausschließlich zur unverbindlichen Information und stellen keine steuerliche Beratung dar.*")
     st.write("Wenn Sie jetzt verkaufen, ergibt sich folgendes Ergebnis:")
@@ -726,6 +734,10 @@ if berechnungstyp == "Steuer und Netto für bestimmte Anzahl berechnen":
     col1.metric("Brutto Verkaufserlös", f"{funktionen.eur(brutto)}", help="Der Brutto Verkaufserlös entspricht der Anzahl verkaufter Anteile multipliziert mit dem aktuellen Kurs pro Anteil. Er stellt den Gesamtbetrag dar, bevor Steuern abgezogen werden.")
     col2.metric("Zu zahlende Steuer", f"{funktionen.eur(steuer)}", help="Die zu zahlende Steuer wird mit dem steuerpflichtigen Gewinn (nach Berücksichtigung von Teilfreistellung, Vorabpauschale, Verlusttopf und Sparerpauschbetrag) multipliziert. Sie zeigt den Betrag an, der an Steuern für den Verkauf der angegebenen Anzahl von Anteilen zu zahlen ist.")
     col3.metric("Netto nach Steuern", f"{funktionen.eur(netto)}", help="Der Nettoerlös nach Steuern ist der Betrag, der Ihnen nach Abzug der Steuern vom Brutto Verkaufserlös übrig bleibt. Er berücksichtigt die Teilfreistellung, die Vorabpauschale, den Verlusttopf und den Sparerpauschbetrag.")
+
+    diff_gewinn_vorab = gewinn_teilfreistellung - gesamte_vorabpauschale
+    if diff_gewinn_vorab < 0:
+        verlusttopf_nach_verkauf = verlusttopf - diff_gewinn_vorab
 
     st.session_state.results = {
         "anzahl_verkaufen": anzahl_verkaufen,
@@ -736,7 +748,8 @@ if berechnungstyp == "Steuer und Netto für bestimmte Anzahl berechnen":
         "gewinn_teilfreistellung": gewinn_teilfreistellung,
         "gewinn_nach_vorabpauschale": gewinn_nach_vorabpauschale,
         "gewinn_nach_verlusttopf": gewinn_nach_verlusttopf,
-        "gewinn_steuerpflichtig": gewinn_steuerpflichtig
+        "gewinn_steuerpflichtig": gewinn_steuerpflichtig,
+        "verlusttopf_nach_verkauf": verlusttopf_nach_verkauf,
     }
     
 
@@ -757,7 +770,6 @@ elif berechnungstyp == "Anteile für gewünschtes Netto berechnen":
     if netto < gewolltes_netto - 0.01:
         st.warning("Nicht genug Anteile vorhanden, um das gewünschte Netto zu erreichen. Es werden alle verfügbaren Anteile verkauft.")
         
-
     st.markdown("### Ergebnis Ihrer Berechnung")
     st.write("*Hinweis: Die Berechnungen dienen ausschließlich zur unverbindlichen Information und stellen keine steuerliche Beratung dar.*")
     st.write("Wenn Sie jetzt verkaufen, ergibt sich folgendes Ergebnis:")
@@ -766,6 +778,10 @@ elif berechnungstyp == "Anteile für gewünschtes Netto berechnen":
     col1.metric("Benötigte Anteile", f"{funktionen.anteil(anzahl_verkaufen)}", help="Anzahl der ETF-Anteile, die verkauft werden müssen, um den gewünschten Nettoerlös zu erreichen. Diese Anzahl basiert auf dem FIFO-Prinzip, der Vorabpauschale, der Teilfreistellung und dem verfügbaren Sparerpauschbetrag.")
     col2.metric("Brutto Verkaufserlös", f"{funktionen.eur(brutto)}", help="Der Brutto Verkaufserlös entspricht der Anzahl verkaufter Anteile multipliziert mit dem aktuellen Kurs pro Anteil. Er stellt den Gesamtbetrag dar, bevor Steuern abgezogen werden.")
     col3.metric("Netto nach Steuern", f"{funktionen.eur(netto)}", help="Der Nettoerlös nach Steuern ist der Betrag, der Ihnen nach Abzug der Steuern vom Brutto Verkaufserlös übrig bleibt. Er berücksichtigt die Teilfreistellung, die Vorabpauschale, den Verlusttopf und den Sparerpauschbetrag.")
+
+    diff_gewinn_vorab = gewinn_teilfreistellung - gesamte_vorabpauschale
+    if diff_gewinn_vorab < 0:
+        verlusttopf_nach_verkauf = verlusttopf - diff_gewinn_vorab
 
     st.session_state.results = {
         "anzahl_verkaufen": anzahl_verkaufen,
@@ -776,7 +792,8 @@ elif berechnungstyp == "Anteile für gewünschtes Netto berechnen":
         "gewinn_teilfreistellung": gewinn_teilfreistellung,
         "gewinn_nach_vorabpauschale": gewinn_nach_vorabpauschale,
         "gewinn_nach_verlusttopf": gewinn_nach_verlusttopf,
-        "gewinn_steuerpflichtig": gewinn_steuerpflichtig
+        "gewinn_steuerpflichtig": gewinn_steuerpflichtig,
+        "verlusttopf_nach_verkauf": verlusttopf_nach_verkauf,
     }
 
 elif berechnungstyp == "Steuerfrei verkaufbare Anteile":
@@ -800,6 +817,10 @@ elif berechnungstyp == "Steuerfrei verkaufbare Anteile":
     col2.metric("Nettoerlös", f"{funktionen.eur(netto)}", help="Da keine Steuer anfällt, entspricht der Nettoerlös dem Bruttoerlös.")
     col3.metric("Verbliebender Sparerpauschbetrag", f"{funktionen.eur(max(0, freibetrag - gewinn_nach_verlusttopf))}", help="Der verbleibende Sparerpauschbetrag, der nach dem Verkauf übrig bleibt.")
 
+    diff_gewinn_vorab = gewinn_teilfreistellung - gesamte_vorabpauschale
+    if diff_gewinn_vorab < 0:
+        verlusttopf_nach_verkauf = verlusttopf - diff_gewinn_vorab
+
     st.session_state.results = {
         "anzahl_verkaufen": anzahl_verkaufen,
         "brutto": brutto,
@@ -810,10 +831,9 @@ elif berechnungstyp == "Steuerfrei verkaufbare Anteile":
         "gewinn_nach_vorabpauschale": gewinn_nach_vorabpauschale,
         "gewinn_nach_verlusttopf": gewinn_nach_verlusttopf,
         "gewinn_steuerpflichtig": gewinn_steuerpflichtig,
-        "verlusttopf_nach_verkauf": max(0, verlusttopf - gewinn),
+        "verlusttopf_nach_verkauf": verlusttopf_nach_verkauf,
     }
     
-
 detailierte_darstellung = st.checkbox("Detaillierte Darstellung")
 
 if detailierte_darstellung:
@@ -834,6 +854,7 @@ if detailierte_darstellung:
         vorabpauschale,
         aktueller_kurs,
         r["verlusttopf_nach_verkauf"],
+        gesamte_vorabpauschale
     )
 
 if "results" in st.session_state:
@@ -843,7 +864,7 @@ if "results" in st.session_state:
         r["brutto"], r["gewinn"], r["gewinn_teilfreistellung"],
         r["gewinn_nach_vorabpauschale"], r["gewinn_nach_verlusttopf"],
         r["gewinn_steuerpflichtig"], r["steuer"], r["netto"],
-        gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name, r["verlusttopf_nach_verkauf"]
+        gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name, r["verlusttopf_nach_verkauf"], gesamte_vorabpauschale
     )
     
     st.download_button(
