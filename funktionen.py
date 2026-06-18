@@ -158,7 +158,7 @@ def finde_anteile_ohne_steuer(max_anteile, aktueller_kurs, data, vorabpauschale,
 
     return round(mid, 6)
 
-def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, brutto, gewinn, gewinn_teilfreistellung, gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf, gewinn_steuerpflichtig, steuer, netto, gesamtkosten, vorabpauschale, aktueller_kurs):
+def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, brutto, gewinn, gewinn_teilfreistellung, gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf, gewinn_steuerpflichtig, steuer, netto, gesamtkosten, vorabpauschale, aktueller_kurs, verlusttopf_nach_verkauf):
     # gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft)
     # st.markdown("## Detaillierte Berechnung")
 
@@ -187,11 +187,11 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
 
     st.markdown("### Verkaufsübersicht")
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     col1.metric("Verkaufte Anteile", f"{anteil(anzahl_verkaufen)}")
     col2.metric("Kurs bei Verkauf", f"{eur(aktueller_kurs)}")
-    # col3.metric("Gewinn vor Steuern", f"{eur(gewinn)}")
+    col3.metric("Verlusttopf nach Verkauf", f"{eur(verlusttopf_nach_verkauf)}")
     
 
     # -------------------------------
@@ -214,7 +214,7 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
         "Betrag": [
             f"{eur(brutto)}",
             f"{eur(gewinn)}",
-            f"{eur(gewinn_teilfreistellung)}",
+            f"{eur(max(0, gewinn_teilfreistellung))}",
             f"{eur(gewinn_nach_vorabpauschale)}",
             f"{eur(gewinn_nach_verlusttopf)}",
             f"{eur(gewinn_steuerpflichtig)}",
@@ -299,7 +299,7 @@ def berechne_vorabpauschalen_df(kursdaten, teilfreistellung_quote):
 
     return ergebnisse
 
-
+@st.cache_data(ttl=3600)
 def erstelle_kaufhistorie_aus_sparplan(sparplan_data, ticker):
 
     ticker_obj = yf.Ticker(ticker)
@@ -381,7 +381,7 @@ def create_pdf(
     brutto, gewinn, gewinn_teilfreistellung,
     gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf,
     gewinn_steuerpflichtig, steuer, netto,
-    gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name
+    gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name, verlusttopf_nach_verkauf
 ):
 
     aktueller_besitz = max_anteile - bereits_verkauft
@@ -415,7 +415,7 @@ def create_pdf(
     ergebnis_data = [
         [
             "Anzahl Anteile im Besitz",
-            "Kurs pro Anteil",
+            "Kurs bei Verkauf",
             "Gesamtwert der Anteile"
         ],
         [
@@ -492,6 +492,15 @@ def create_pdf(
         )
     )
 
+    elements.append(
+        Paragraph(
+            f"<font size=9>"
+            f"Allgemeiner Verlusttopf nach Verkauf: <b>{eur(verlusttopf_nach_verkauf)}</b>"
+            f"</font>",
+            styles["Normal"]
+        )
+    )
+
 
     elements.append(Spacer(1, 20))
 
@@ -506,7 +515,7 @@ def create_pdf(
         ["Berechnungsschritt", "Betrag"],
         ["Brutto Verkaufserlös", eur(brutto)],
         ["Gewinn vor Steuern", eur(gewinn)],
-        ["Gewinn nach Teilfreistellung", eur(gewinn_teilfreistellung)],
+        ["Gewinn nach Teilfreistellung", eur(max(0, gewinn_teilfreistellung))],
         ["Nach Abzug Vorabpauschale", eur(gewinn_nach_vorabpauschale)],
         ["Nach Verlustverrechnung", eur(gewinn_nach_verlusttopf)],
         ["Steuerpflichtiger Gewinn", eur(gewinn_steuerpflichtig)],
@@ -570,3 +579,14 @@ def create_pdf(
 
     return buffer
 
+
+@st.cache_data(ttl=3600)
+def lade_etf_info(ticker):
+    ticker_obj = yf.Ticker(ticker)
+    return ticker_obj.info
+
+
+@st.cache_data(ttl=3600)
+def lade_preis(ticker: str):
+    ticker_obj = yf.Ticker(ticker)
+    return ticker_obj.fast_info["lastPrice"]

@@ -33,12 +33,18 @@ st.markdown("""
 
 *Hinweis: Die Berechnungen dienen nur zur unverbindlichen Orientierung und stellen keine steuerliche Beratung dar.*
 
-Geben Sie hier Ihre Daten ein um:
-- zu berechnen, **wie viele ETF-Anteile Sie steuerfrei verkaufen können**
-- herauszufinden, **wie viele Anteile Sie verkaufen müssen, um einen bestimmten Nettobetrag zu erhalten**
-- die **voraussichtliche Steuer beim Verkauf von ETFs** zu berechnen
+#### Was kann dieser Rechner?
+            
+• steuerfrei verkaufbare Anteile ermitteln
+            
+• Anteile für gewünschten Netto‑Betrag bestimmen
+            
+• Steuer beim ETF‑Verkauf berechnen
 
-Mehr Informationen auf der Website: <a href="https://www.etfsteuerrechner.de" target="_blank">etfsteuerrechner.de</a>
+Der Rechner berücksichtigt:
+FIFO, Teilfreistellung, Vorabpauschale, Verlusttopf und Sparerpauschbetrag.
+            
+Mehr Informationen auf <a href="https://www.etfsteuerrechner.de" target="_blank">etfsteuerrechner.de</a>
             
 ---
         
@@ -101,9 +107,18 @@ def lade_kursdaten(ticker, startjahr):
 
 eingabe_optionen = st.selectbox("Wie möchten Sie Ihre Daten eingeben?", ["CSV‑Export von Trade Republic", "ETF Suche", "Manuelle Eingabe"])
 
+st.markdown("""
+• **CSV‑Export:** Laden Sie eine CSV‑Exportdatei von Trade Republic hoch, um Ihre Transaktionen automatisch zu importieren.
+
+• **ETF‑Suche:** Wählen Sie Ihren ETF über die Suche aus. Sparpläne können automatisch generiert werden, und die Kursdaten für die Vorabpauschale werden automatisch geladen.
+
+• **Manuell:** Geben Sie alle Daten selbst ein.
+
+*Hinweis:* Bei der ETF‑Suche und der manuellen Eingabe können Sie Ihre Daten anschließend als CSV herunterladen. So können Sie sie bei einer späteren Berechnung wieder hochladen, ohne alles erneut eingeben zu müssen.
+""")
 
 if eingabe_optionen == "Manuelle Eingabe":
-    aktueller_kurs = st.number_input("Aktueller Kurs (€)", value=100.00, format="%.2f")
+    aktueller_kurs = st.number_input("Verkaufskurs pro Anteil (€)", value=100.00, format="%.2f")
     etf_name = "Unbekannt"
 elif eingabe_optionen == "CSV‑Export von Trade Republic":
     st.write("Hinweis zum CSV‑Import: Sie können eine CSV‑Exportdatei aus Trade Republic hochladen, um Ihre Transaktionen automatisch einzulesen. Die Datei wird ausschließlich zur Durchführung der Berechnung verwendet und nicht dauerhaft gespeichert. Die Verarbeitung erfolgt nur für die Dauer der Berechnung. Bitte überprüfen Sie die importierten Daten sorgfältig. Änderungen am Exportformat des Brokers oder unvollständige Daten können zu Abweichungen in der Berechnung führen. Trade Republic ist eine Marke der Trade Republic Bank GmbH. Dieses Tool steht in keiner Verbindung zu Trade Republic und wird nicht von Trade Republic bereitgestellt oder unterstütztt.")
@@ -112,7 +127,7 @@ elif eingabe_optionen == "CSV‑Export von Trade Republic":
 
 
     if not trade_republic_file:
-        st.warning("Bitte laden Sie eine CSV-Datei hoch, um fortzufahren.")
+        st.warning("Bitte laden Sie eine CSV-Datei hoch, um fortzufahren. Es werden keine persönlichen Daten gespeichert.")
         st.stop()
 
     entry_df = pd.read_csv(trade_republic_file)
@@ -161,7 +176,7 @@ elif eingabe_optionen == "CSV‑Export von Trade Republic":
 
     try:
         aktueller_kurs = ticker_obj.fast_info["lastPrice"]
-        st.success(f"Aktueller Kurs für {auswahl}: {aktueller_kurs:.2f}€")
+        st.success(f"Aktueller Marktpreis für {auswahl}: {aktueller_kurs:.2f} €. Dieser Wert wird als Verkaufskurs für die Berechnung verwendet.")
 
         kursoptionen = st.checkbox("Verkaufskurs manuell festlegen", help="Aktivieren Sie diese Option, um einen eigenen Verkaufskurs zu simulieren. Dies ist nützlich, wenn Sie berechnen möchten, wie sich Steuern bei einem zukünftigen Kurs verändern.")
 
@@ -170,7 +185,7 @@ elif eingabe_optionen == "CSV‑Export von Trade Republic":
     except:
         st.warning("Der aktuelle Kurs konnte nicht automatisch geladen werden.")
         aktueller_kurs = st.number_input(
-            "Aktueller Kurs (€)",
+            "Verkaufskurs pro Anteil (€)",
             value=100.0,
             format="%.2f"
         )
@@ -200,11 +215,11 @@ elif eingabe_optionen == "CSV‑Export von Trade Republic":
         "Kaufdatum": kaeufe_ticker["datetime"]
     }).reset_index(drop=True)
 
-    st.write(data)
+    st.write("Erkannte Käufe aus der CSV:")
+    st.dataframe(data)
 
     # sammele alle vekäufe dieser aktie 
     #addiere alle um eine anzahl verkaufter anteile zu bekommen
-
     verkaeufe_ticker = entry_df[
         (entry_df["symbol"] == ticker) &
         (entry_df["type"] == "SELL")
@@ -233,7 +248,8 @@ else:
         ticker_obj = yf.Ticker(ticker)
 
         try:
-            info = ticker_obj.info
+            # info = ticker_obj.info
+            info = funktionen.lade_etf_info(ticker)
             name = info.get("shortName") or info.get("longName") or ticker
             isin = info.get("isin")
             if isin:
@@ -244,7 +260,8 @@ else:
             etf_name = ticker
 
         try:
-            preis = ticker_obj.fast_info["lastPrice"]
+            preis = funktionen.lade_preis(ticker)
+            # preis = ticker_obj.fast_info["lastPrice"]
         except:
             st.warning("Der aktuelle Kurs konnte nicht geladen werden. Bitte geben Sie den Kurs manuell ein.")
             st.stop()
@@ -256,10 +273,10 @@ else:
 
     if kursoptionen:
         aktueller_kurs = st.number_input("Verkaufskurs (€)", value=100.00, format="%.2f", help="Aktueller Verkaufskurs eines ETF-Anteils. Dieser Wert bestimmt den Erlös beim Verkauf. Wenn Sie einen ETF über die Suche auswählen, wird der Kurs automatisch geladen. Alternativ können Sie einen eigenen Verkaufskurs eingeben.")
-        st.write(f"Aktueller Kurs: {preis:.2f}€")
+        st.write(f"Aktueller Marktpreis: {preis:.2f}€")
     else:
         aktueller_kurs = preis
-        st.success(f"Aktueller Kurs: {aktueller_kurs:.2f}€")
+        st.success(f"Aktueller Marktpreis: {aktueller_kurs:.2f}€. Dieser Wert wird als Verkaufskurs für die Berechnung verwendet.")
 
 if aktueller_kurs < 0:
     st.warning("Bitte geben Sie einen gültigen aktuellen Kurs ein.")
@@ -273,7 +290,7 @@ if freibetrag < 0:
     st.warning("Bitte geben Sie einen gültigen Freibetrag ein.")
     st.stop()
 
-verlusttopf = st.number_input("Allgemeiner Verlusttopf (€)", value=0.00, min_value=0.00, help="Allgemeiner Verlusttopf Ihrer Bank. Verluste aus früheren Kapitalanlagen können mit Gewinnen verrechnet werden und reduzieren dadurch die zu zahlende Steuer.")
+verlusttopf = st.number_input("Allgemeiner Verlusttopf (€)", value=0.00, min_value=0.00, help="Wenn Sie früher Wertpapiere mit Verlust verkauft haben, speichert Ihre Bank diese Verluste im sogenannten Allgemeinen Verlusttopf. Diese können mit Gewinnen verrechnet werden.")
 if verlusttopf < 0:
     st.warning("Bitte geben Sie einen gültigen Verlusttopf ein.")
     st.stop()
@@ -402,7 +419,7 @@ elif upload == "CSV hochladen":
 
 
     else:
-        st.warning("Bitte laden Sie eine CSV-Datei hoch mit den Spalten Kaufdatum, Anzahl und Preis.")
+        st.warning("Bitte laden Sie eine CSV-Datei hoch mit den Spalten Kaufdatum, Anzahl und Preis. Es werden keine persönlichen Daten gespeichert.")
         data = pd.DataFrame({
             "Anzahl": [],
             "Preis": [],
@@ -580,7 +597,7 @@ if data.isnull().values.any():
     st.stop()
 
 if not eingabe_optionen == "CSV‑Export von Trade Republic":
-    bereits_verkauft = st.number_input("Anzahl bereits verkaufte Anteile (für FIFO-Berechnung)", value=0, help="Gesamtzahl der Anteile, die Sie aus diesem ETF bereits verkauft haben. Der Rechner nutzt diese Information für die FIFO-Berechnung (First-In-First-Out), da steuerlich immer die zuerst gekauften Anteile zuerst verkauft werden.")
+    bereits_verkauft = st.number_input("Anzahl bereits verkaufter Anteile (für FIFO-Berechnung)", value=0, help="Gesamtzahl der Anteile, die Sie aus diesem ETF bereits verkauft haben. Der Rechner nutzt diese Information für die FIFO-Berechnung (First-In-First-Out), da steuerlich immer die zuerst gekauften Anteile zuerst verkauft werden.")
 
 max_anteile = data["Anzahl"].sum()
 
@@ -589,7 +606,7 @@ if bereits_verkauft > max_anteile:
     st.stop()
 
 if bereits_verkauft < 0:
-    st.warning("Bitte geben Sie eine gültige Anzahl bereits verkaufte Anteile ein.")
+    st.warning("Bitte geben Sie eine gültige Anzahl bereits verkaufter Anteile ein.")
     st.stop()
 
 if teilfreistellung:
@@ -610,6 +627,8 @@ else:
 # vorabpauschale 
 ###################################################
 
+
+
 if thesaurierend:
     # lade älteste jahr aus hochgeladener csv datei
     aeltestes_jahr = data["Kaufdatum"].dt.year.min()
@@ -626,6 +645,12 @@ if thesaurierend:
 
     elif eingabe_optionen == "Manuelle Eingabe":
         # kursdaten manuell einfügen oder ohne vorabpauschale rechnen lassen
+
+        st.markdown("""
+        Die Vorabpauschale ist eine jährliche Mindestbesteuerung für thesaurierende ETFs. 
+        Beim Verkauf wird sie vom steuerpflichtigen Gewinn abgezogen, da darauf bereits Steuern gezahlt wurden.
+        """)
+
         ohne_vorabpauschale = st.checkbox("Ohne Vorabpauschale rechnen", value=True, help="Wenn diese Option aktiviert ist, wird keine Vorabpauschale berücksichtigt. Dadurch kann die Steuerberechnung weniger genau sein. Die Vorabpauschale wird normalerweise jährlich von der Bank berechnet und von den zu zahlenden Steuern abgezogen.")
 
         if ohne_vorabpauschale:
@@ -693,8 +718,9 @@ if berechnungstyp == "Steuer und Netto für bestimmte Anzahl berechnen":
     steuer = gewinn_steuerpflichtig * steuersatz
     netto = brutto - steuer
     st.markdown("### Ergebnis Ihrer Berechnung")
+    
     st.write("*Hinweis: Die Berechnungen dienen ausschließlich zur unverbindlichen Information und stellen keine steuerliche Beratung dar.*")
-
+    st.write("Wenn Sie jetzt verkaufen, ergibt sich folgendes Ergebnis:")
     
     col1, col2, col3 = st.columns(3)
     col1.metric("Brutto Verkaufserlös", f"{funktionen.eur(brutto)}", help="Der Brutto Verkaufserlös entspricht der Anzahl verkaufter Anteile multipliziert mit dem aktuellen Kurs pro Anteil. Er stellt den Gesamtbetrag dar, bevor Steuern abgezogen werden.")
@@ -734,7 +760,7 @@ elif berechnungstyp == "Anteile für gewünschtes Netto berechnen":
 
     st.markdown("### Ergebnis Ihrer Berechnung")
     st.write("*Hinweis: Die Berechnungen dienen ausschließlich zur unverbindlichen Information und stellen keine steuerliche Beratung dar.*")
-
+    st.write("Wenn Sie jetzt verkaufen, ergibt sich folgendes Ergebnis:")
     
     col1, col2, col3 = st.columns(3)
     col1.metric("Benötigte Anteile", f"{funktionen.anteil(anzahl_verkaufen)}", help="Anzahl der ETF-Anteile, die verkauft werden müssen, um den gewünschten Nettoerlös zu erreichen. Diese Anzahl basiert auf dem FIFO-Prinzip, der Vorabpauschale, der Teilfreistellung und dem verfügbaren Sparerpauschbetrag.")
@@ -767,10 +793,10 @@ elif berechnungstyp == "Steuerfrei verkaufbare Anteile":
 
     st.markdown("### Ergebnis Ihrer Berechnung")
     st.write("*Hinweis: Die Berechnungen dienen ausschließlich zur unverbindlichen Information und stellen keine steuerliche Beratung dar.*")
-
+    st.write("Wenn Sie jetzt verkaufen, ergibt sich folgendes Ergebnis:")
     
     col1, col2, col3 = st.columns(3)
-    col1.metric("Steuerfrei verkaufbare Anteile", f"{funktionen.anteil(anzahl_verkaufen)}", help="Anzahl der ETF-Anteile, die verkauft werden können, ohne dass Steuern anfallen. Diese Anzahl basiert auf dem FIFO-Prinzip, der Vorabpauschale, der Teilfreistellung und dem verfügbaren Sparerpauschbetrag.")
+    col1.metric("Steuerfrei verkaufbare Anteile", f"{funktionen.anteil(anzahl_verkaufen)}", help="Anzahl der ETF-Anteile, die Sie verkaufen können, ohne dass Abgeltungssteuer anfällt. Die Berechnung nutzt Ihren noch verfügbaren Sparerpauschbetrag, mit dem Kapitalerträge bis zu einer bestimmten Höhe pro Jahr steuerfrei bleiben.")
     col2.metric("Nettoerlös", f"{funktionen.eur(netto)}", help="Da keine Steuer anfällt, entspricht der Nettoerlös dem Bruttoerlös.")
     col3.metric("Verbliebender Sparerpauschbetrag", f"{funktionen.eur(max(0, freibetrag - gewinn_nach_verlusttopf))}", help="Der verbleibende Sparerpauschbetrag, der nach dem Verkauf übrig bleibt.")
 
@@ -783,7 +809,8 @@ elif berechnungstyp == "Steuerfrei verkaufbare Anteile":
         "gewinn_teilfreistellung": gewinn_teilfreistellung,
         "gewinn_nach_vorabpauschale": gewinn_nach_vorabpauschale,
         "gewinn_nach_verlusttopf": gewinn_nach_verlusttopf,
-        "gewinn_steuerpflichtig": gewinn_steuerpflichtig
+        "gewinn_steuerpflichtig": gewinn_steuerpflichtig,
+        "verlusttopf_nach_verkauf": max(0, verlusttopf - gewinn),
     }
     
 
@@ -805,7 +832,8 @@ if detailierte_darstellung:
         r["netto"],
         gesamtkosten,
         vorabpauschale,
-        aktueller_kurs
+        aktueller_kurs,
+        r["verlusttopf_nach_verkauf"],
     )
 
 if "results" in st.session_state:
@@ -815,7 +843,7 @@ if "results" in st.session_state:
         r["brutto"], r["gewinn"], r["gewinn_teilfreistellung"],
         r["gewinn_nach_vorabpauschale"], r["gewinn_nach_verlusttopf"],
         r["gewinn_steuerpflichtig"], r["steuer"], r["netto"],
-        gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name
+        gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name, r["verlusttopf_nach_verkauf"]
     )
     
     st.download_button(
