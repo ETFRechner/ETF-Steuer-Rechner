@@ -7,6 +7,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 import io
 from reportlab.platypus import TableStyle
+from datetime import datetime
+import numpy as np
 
 def eur(x):
     return f"{x:.2f}".replace(".", ",") + " €"
@@ -14,87 +16,124 @@ def eur(x):
 def anteil(x):
     return f"{x:.5f}".replace(".", ",")
 
+import numpy as np
+from datetime import datetime
+import pandas as pd
+import streamlit as st
 
-def bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft):
-    rest_zu_verkaufen = anzahl_verkaufen
-    gewinn = 0
-    brutto = 0
+def bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft, tagesgenau=False):
+
+    shares = data["Anzahl"].to_numpy(dtype=float)
+    prices = data["Preis"].to_numpy(dtype=float)
+    dates = pd.to_datetime(data["Kaufdatum"]).to_numpy()
+
+    # bereits verkaufte Anteile entfernen (FIFO)
+    remaining = shares.copy()
+    verkauft = bereits_verkauft
+
+    for i in range(len(remaining)):
+        if verkauft <= 0:
+            break
+        if remaining[i] <= verkauft:
+            verkauft -= remaining[i]
+            remaining[i] = 0
+        else:
+            remaining[i] -= verkauft
+            verkauft = 0
+
+    cum_shares = np.cumsum(remaining)
+
+    if cum_shares[-1] < anzahl_verkaufen - 1e-9:
+        st.warning("Sie verfügen nicht über ausreichend Anteile für das gewünschte Netto.")
+        st.stop()
+
+    idx = np.searchsorted(cum_shares, anzahl_verkaufen)
+
+    verkaufte_shares = np.zeros_like(remaining)
+
+    if idx > 0:
+        verkaufte_shares[:idx] = remaining[:idx]
+
+    if idx < len(remaining):
+        vorher = cum_shares[idx-1] if idx > 0 else 0
+        verkaufte_shares[idx] = anzahl_verkaufen - vorher
+
+    # Gewinn und brutto (vektorisiert)
+    gewinn = np.sum((aktueller_kurs - prices) * verkaufte_shares)
+    brutto = np.sum(aktueller_kurs * verkaufte_shares)
+
     gesamte_vorabpauschale = 0
 
-    for _, row in data.iterrows():
+    if len(vorabpauschale) == 0:
+        return gewinn, brutto, gesamte_vorabpauschale, 0
 
-        if rest_zu_verkaufen <= 0:
-            break
+    vp_jahre = vorabpauschale["jahr"].to_numpy()
+    vp_values = vorabpauschale["vorabpauschale_stueck"].to_numpy()
 
-        anzahl = row["Anzahl"]
-        kaufpreis = row["Preis"]
-        datum = row["Kaufdatum"]
+    for i in np.where(verkaufte_shares > 0)[0]:
 
-        if bereits_verkauft > 0:
-            if anzahl <= bereits_verkauft:
-                bereits_verkauft -= anzahl
-                # print(f"nichts verkauft von {datum}, da bereits verkauft")
-                continue
-            else:
-                anzahl -= bereits_verkauft
-                bereits_verkauft = 0
+        kaufdatum = pd.Timestamp(dates[i])
+        jahr_kauf = kaufdatum.year
 
-        # wie viele aus dieser position verkaufen
-        zu_verkaufen = min(anzahl, rest_zu_verkaufen)
+        mask = vp_jahre >= jahr_kauf
 
-        # gewinn berechnen
-        gewinn += (aktueller_kurs - kaufpreis) * zu_verkaufen
-        brutto += (aktueller_kurs) * zu_verkaufen
+        jahre = vp_jahre[mask]
+        vp = vp_values[mask]
 
-        rest_zu_verkaufen -= zu_verkaufen
+        if len(jahre) == 0:
+            continue
 
-        # berechne gesamte vorabpauschale für diese position
-        rows = vorabpauschale.loc[vorabpauschale["jahr"] >= datum.year]
+        if not tagesgenau:
 
-        for _, vp_row in rows.iterrows():
+            monate = np.where(
+                jahre == jahr_kauf,
+                12 - kaufdatum.month + 1,
+                12
+            )
 
-            vorabpauschale_stueck = vp_row["vorabpauschale_stueck"]
-    
-            if datum.year == vp_row["jahr"]:
-                # passe pauschale an die zeit pro jahr an
-                monate_gehalten_im_Jahr = 12 - datum.month + 1
-            else:
-                monate_gehalten_im_Jahr = 12
+            anteil = monate / 12
 
-            vorabpauschale_anteil = vorabpauschale_stueck * monate_gehalten_im_Jahr / 12
-            gesamte_vorabpauschale += vorabpauschale_anteil * zu_verkaufen 
-    
-    if rest_zu_verkaufen > 1e-6:
-        st.warning(f"Sie verfügen nicht über ausreichend Anteile für das gewünschte Netto.")
-        st.stop()
-        # raise ValueError("Nicht genug Anteile vorhanden")
+        else:
 
-        
-    return gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen
+            anteil = np.ones_like(jahre, dtype=float)
 
+            first_year_mask = jahre == jahr_kauf
 
+            if np.any(first_year_mask):
+
+                ende = datetime(jahr_kauf, 12, 31)
+                tage = (ende - kaufdatum).days + 1
+                anteil[first_year_mask] = tage / 365
+
+        gesamte_vorabpauschale += np.sum(vp * anteil) * verkaufte_shares[i]
+
+    return gewinn, brutto, gesamte_vorabpauschale, 0
 
 def bestimme_netto(brutto, gewinn, steuersatz, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag):
-    gewinn_teilfreistellung = gewinn * (1 - teilfreistellung_quote)
-    gewinn_nach_vorabpauschale = max(0, gewinn_teilfreistellung - gesamte_vorabpauschale)
-    gewinn_nach_verlusttopf = max(0, gewinn_nach_vorabpauschale - verlusttopf)
-    gewinn_steuerpflichtig = max(0, gewinn_nach_verlusttopf - freibetrag)
+    gewinn_steuerpflichtig = bestimme_steuerpflichtigen_gewinnn(gewinn, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag, all = False)
+                                       
+    # gewinn_teilfreistellung = gewinn * (1 - teilfreistellung_quote)
+    # gewinn_nach_vorabpauschale = max(0, gewinn_teilfreistellung - gesamte_vorabpauschale)
+    # gewinn_nach_verlusttopf = max(0, gewinn_nach_vorabpauschale - verlusttopf)
+    # gewinn_steuerpflichtig = max(0, gewinn_nach_verlusttopf - freibetrag)
 
     steuer = gewinn_steuerpflichtig * steuersatz
     netto = brutto - steuer
 
     return netto
 
-def bestimme_steuerpflichtigen_gewinnn(gewinn, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag):
-    gewinn_teilfreistellung = gewinn * (1 - teilfreistellung_quote)
-    gewinn_nach_vorabpauschale = max(0, gewinn_teilfreistellung - gesamte_vorabpauschale)
-    gewinn_nach_verlusttopf = max(0, gewinn_nach_vorabpauschale - verlusttopf)
+def bestimme_steuerpflichtigen_gewinnn(gewinn, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag, all = False):
+    gewinn_nach_vorabpauschale = gewinn - gesamte_vorabpauschale
+    gewinn_teilfreistellung = gewinn_nach_vorabpauschale * (1 - teilfreistellung_quote)
+    gewinn_nach_verlusttopf = max(0, gewinn_teilfreistellung - verlusttopf)
     gewinn_steuerpflichtig = max(0, gewinn_nach_verlusttopf - freibetrag)
+    if all:
+        return gewinn_nach_vorabpauschale, gewinn_teilfreistellung, gewinn_nach_verlusttopf, gewinn_steuerpflichtig
+    else:
+        return gewinn_steuerpflichtig
 
-    return gewinn_steuerpflichtig
 
-
-def finde_anteile(ziel_netto, max_anteile, aktueller_kurs, data, vorabpauschale, bereits_verkauft, steuersatz, teilfreistellung_quote, verlusttopf, freibetrag):
+def finde_anteile(ziel_netto, max_anteile, aktueller_kurs, data, vorabpauschale, bereits_verkauft, steuersatz, teilfreistellung_quote, verlusttopf, freibetrag, tagesgeanue_berechnung):
 
     low = 0.0
     high = float(max_anteile)
@@ -104,7 +143,7 @@ def finde_anteile(ziel_netto, max_anteile, aktueller_kurs, data, vorabpauschale,
         mid = (low + high) / 2
 
         gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(
-            mid, aktueller_kurs, data, vorabpauschale, bereits_verkauft
+            mid, aktueller_kurs, data, vorabpauschale, bereits_verkauft, tagesgenau = tagesgeanue_berechnung
         )
 
         netto = bestimme_netto(
@@ -122,14 +161,14 @@ def finde_anteile(ziel_netto, max_anteile, aktueller_kurs, data, vorabpauschale,
 
     return round(mid, 6)
 
-def finde_anteile_ohne_steuer(max_anteile, aktueller_kurs, data, vorabpauschale, bereits_verkauft, steuersatz, teilfreistellung_quote, verlusttopf, freibetrag):
+def finde_anteile_ohne_steuer(max_anteile, aktueller_kurs, data, vorabpauschale, bereits_verkauft, steuersatz, teilfreistellung_quote, verlusttopf, freibetrag, tagesgeanue_berechnung):
 
     low = 0.0
     high = float(max_anteile)
 
     # prüfen ob überhaupt Steuern entstehen
     gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(
-        high, aktueller_kurs, data, vorabpauschale, bereits_verkauft
+        high, aktueller_kurs, data, vorabpauschale, bereits_verkauft, tagesgenau = tagesgeanue_berechnung
     )
 
     steuerpflichtiger_gewinn = bestimme_steuerpflichtigen_gewinnn(
@@ -141,7 +180,7 @@ def finde_anteile_ohne_steuer(max_anteile, aktueller_kurs, data, vorabpauschale,
         mid = (low + high) / 2
 
         gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(
-            mid, aktueller_kurs, data, vorabpauschale, bereits_verkauft
+            mid, aktueller_kurs, data, vorabpauschale, bereits_verkauft, tagesgenau = tagesgeanue_berechnung
         )
 
         steuerpflichtiger_gewinn = bestimme_steuerpflichtigen_gewinnn(
@@ -158,7 +197,7 @@ def finde_anteile_ohne_steuer(max_anteile, aktueller_kurs, data, vorabpauschale,
 
     return round(mid, 6)
 
-def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, brutto, gewinn, gewinn_teilfreistellung, gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf, gewinn_steuerpflichtig, steuer, netto, gesamtkosten, vorabpauschale, aktueller_kurs, verlusttopf_nach_verkauf, gesamte_vorabpauschale):
+def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, brutto, gewinn, gewinn_teilfreistellung, gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf, gewinn_steuerpflichtig, steuer, netto, gesamtkosten, vorabpauschale, aktueller_kurs, verlusttopf_nach_verkauf, gesamte_vorabpauschale, freibetrag):
     # gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft)
     # st.markdown("## Detaillierte Berechnung")
 
@@ -202,24 +241,32 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
 
     steuer_df = pd.DataFrame({
         "Berechnungsschritt": [
-            "Bruttoverkauf",
+            "Anzahl zu verkaufender Anteile",
+            "Kurs bei Verkauf",
+            "Brutto Verkaufserlös",
             "Gewinn vor Steuer",
-            "Nach Teilfreistellung",
             "Abzuziehende Vorabpauschale",
-            "Nach Vorabpauschale",
-            "Nach Verlusttopf",
-            "Nach Sparerpauschbetrag",
+            "Gewinn nach Vorabpauschale",
+            "Gewinn nach Teilfreistellung",
+            "Gewinn nach Verlusttopf",
+            "Neuer Verlusttopf",
+            "Gewinn nach Sparerpauschbetrag",
+            "Ungenutzter Sparerpauschbetrag",
             "Zu zahlende Steuer",
             "Netto nach Steuern"
         ],
         "Betrag": [
+            f"{anteil(anzahl_verkaufen)}",
+            f"{eur(aktueller_kurs)}",
             f"{eur(brutto)}",
             f"{eur(gewinn)}",
-            f"{eur(max(0, gewinn_teilfreistellung))}",
             f"{eur(gesamte_vorabpauschale)}",
             f"{eur(gewinn_nach_vorabpauschale)}",
+            f"{eur(gewinn_teilfreistellung)}",
             f"{eur(gewinn_nach_verlusttopf)}",
+            f"{eur(verlusttopf_nach_verkauf)}",
             f"{eur(gewinn_steuerpflichtig)}",
+            f"{eur(max(0, freibetrag - gewinn_nach_verlusttopf))}",
             f"{eur(steuer)}",
             f"{eur(netto)}"
         ]
@@ -237,17 +284,17 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
 
     vorab_display = vorabpauschale.rename(columns={
         "jahr": "Kalenderjahr",
-        "vorabpauschale_stueck": "VAP/Anteil (€) (inkl. TF)"
+        "vorabpauschale_stueck": "VAP/Anteil (€)"
     })
 
-    vorab_display["VAP/Anteil (€) (inkl. TF)"] = (
-        vorab_display["VAP/Anteil (€) (inkl. TF)"]
-        .map(lambda x: f"{x:.5f}".replace(".", ","))
+    vorab_display["VAP/Anteil (€)"] = (
+        vorab_display["VAP/Anteil (€)"]
+        .map(lambda x: f"{x:.8f}".replace(".", ","))
     )
     
 
     st.markdown("""
-        Die Tabelle zeigt die jährlich angesetzte Vorabpauschale (VAP) pro Anteil. Die Teilfreistellung (TF) ist dabei bereits berücksichtigt.
+        Die Tabelle zeigt die jährlich angesetzte Vorabpauschale (VAP) pro Anteil. Sie wird aber nur anteilig pro Jahr berücksichtigt.
         Dieser Wert reduziert den steuerpflichtigen Gewinn beim Verkauf, da darauf bereits Steuer gezahlt wurde.
         """)
 
@@ -255,7 +302,7 @@ def detailierte_darstellung(anzahl_verkaufen, max_anteile, bereits_verkauft, bru
 
 
 @st.cache_data
-def berechne_vorabpauschalen_df(kursdaten, teilfreistellung_quote):
+def berechne_vorabpauschalen_df(kursdaten):
 
     basiszins_df = pd.read_csv("basiszins.csv")
 
@@ -263,7 +310,7 @@ def berechne_vorabpauschalen_df(kursdaten, teilfreistellung_quote):
 
     for jahr in kursdaten["jahr"].unique():
 
-        if jahr not in basiszins_df["jahr"].values:
+        if jahr not in basiszins_df["jahr"].values or jahr == datetime.today().year:
             continue
 
 
@@ -280,13 +327,13 @@ def berechne_vorabpauschalen_df(kursdaten, teilfreistellung_quote):
             basiszins_df["jahr"] == jahr, "basiszins"
         ].values[0]
 
-        basisertrag = preis_1_jan * basiszins/100 * (1 - teilfreistellung_quote)
+        basisertrag = preis_1_jan * basiszins/100 * 0.7 # gesetzliche konstante
 
         vorabpauschale = min(wertsteigerung, basisertrag)
 
         ergebnisse.append({
             "jahr": jahr,
-            "vorabpauschale_stueck": vorabpauschale * (1 - teilfreistellung_quote)
+            "vorabpauschale_stueck": vorabpauschale 
         })
 
     # erstelle ein leeres df mit nur spaltennemen
@@ -380,7 +427,9 @@ def create_pdf(
     brutto, gewinn, gewinn_teilfreistellung,
     gewinn_nach_vorabpauschale, gewinn_nach_verlusttopf,
     gewinn_steuerpflichtig, steuer, netto,
-    gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name, verlusttopf_nach_verkauf, gesamte_vorabpauschale
+    gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, 
+    etf_name, verlusttopf_nach_verkauf, gesamte_vorabpauschale, 
+    teilfreistellung_quote, kirchensteuer
 ):
 
     aktueller_besitz = max_anteile - bereits_verkauft
@@ -409,6 +458,18 @@ def create_pdf(
     elements.append(Spacer(1, 10))
 
     elements.append(Paragraph(f"<b>ETF:</b> {etf_name}", styles["Normal"]))
+
+    elements.append(
+        Paragraph(
+            f"<font size=9>"
+            f"Teilfreistellungsquote: <b>{teilfreistellung_quote * 100:.2f} %</b> &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"Kirchensteuer: <b>{kirchensteuer}</b>"
+            f"</font>",
+            styles["Normal"]
+        )
+    )
+
+
     elements.append(Spacer(1, 6))
 
     ergebnis_data = [
@@ -512,13 +573,18 @@ def create_pdf(
 
     steuer_data = [
         ["Berechnungsschritt", "Betrag"],
+        ["Anzahl zu verkaufender Anteile", f"{anteil(anzahl_verkaufen)}"],
+        ["Kurs bei Verkauf", f"{eur(aktueller_kurs)}"],
         ["Brutto Verkaufserlös", eur(brutto)],
         ["Gewinn vor Steuern", eur(gewinn)],
-        ["Gewinn nach Teilfreistellung", eur(max(0, gewinn_teilfreistellung))],
         ["Abzuziehende Vorabpauschale", eur(gesamte_vorabpauschale)],
-        ["Nach Abzug Vorabpauschale", eur(gewinn_nach_vorabpauschale)],
-        ["Nach Verlustverrechnung", eur(gewinn_nach_verlusttopf)],
-        ["Steuerpflichtiger Gewinn", eur(gewinn_steuerpflichtig)],
+        ["Gewinn nach Abzug Vorabpauschale", eur(gewinn_nach_vorabpauschale)],
+        ["Gewinn nach Teilfreistellung", eur(gewinn_teilfreistellung)],
+        ["Gewinn nach Verlustverrechnung", eur(gewinn_nach_verlusttopf)],
+        ["Neuer Verlusttopf", eur(verlusttopf_nach_verkauf)],
+        ["Gewinn nach Sparerpauschbetrag", eur(gewinn_steuerpflichtig)],
+        ["Ungenutzter Sparerpauschbetrag", eur(max(0, freibetrag - gewinn_nach_verlusttopf))],
+        # ["Steuerpflichtiger Gewinn", eur(gewinn_steuerpflichtig)],
         ["Zu zahlende Steuer", eur(steuer)],
         ["Netto nach Steuern", eur(netto)],
     ]
@@ -547,12 +613,12 @@ def create_pdf(
         elements.append(Paragraph("Vorabpauschale pro Anteil", styles["Heading2"]))
         elements.append(Spacer(1, 10))
 
-        data = [["Kalenderjahr", "Vorabpauschale pro Anteil (inkl. Teilfreistellung)"]]
+        data = [["Kalenderjahr", "Vorabpauschale pro Anteil"]]
 
         for _, row in vorabpauschale.iterrows():
             data.append([
                 f"{row['jahr']:.0f}",
-                eur(row["vorabpauschale_stueck"])
+                f"{row['vorabpauschale_stueck']:.8f}".replace(".", ",")
             ])
 
         table = Table(data, colWidths=[150,200])

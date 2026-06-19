@@ -93,6 +93,10 @@ def lade_kursdaten(ticker, startjahr):
 
     jahresstart = kurs_data.groupby("jahr").first()
 
+    # prüfen ob Daten für startjahr existieren
+    if startjahr not in jahresstart.index:
+        st.warning(f"Überprüfen Sie, ob Sie Ihre Kaufdaten korrekt eingegeben haben. Es liegen keine automatischen Kursdaten für Ihren ältesten Kauf vor. Falls alles stimmt beachten Sie, dass die Vorabpauschale nicht richtig berechnet werden kann.")
+
     jahresstart = jahresstart.loc[startjahr:]
 
     jahresstart = jahresstart[["Close"]]
@@ -130,7 +134,7 @@ elif eingabe_optionen == "CSV‑Export von Trade Republic":
         st.warning("Bitte laden Sie eine CSV-Datei hoch, um fortzufahren. Es werden keine persönlichen Daten gespeichert.")
         st.stop()
 
-    entry_df = pd.read_csv(trade_republic_file)
+    entry_df = pd.read_csv(trade_republic_file, decimal=".")
 
     # sicherstellen, dass die notwendigen spalten vorhanden sind
     if not set(["datetime", "type", "symbol", "asset_class", "shares", "price"]).issubset(entry_df.columns):
@@ -289,6 +293,9 @@ if aktueller_kurs < 0:
 
 if not eingabe_optionen == "CSV‑Export von Trade Republic":
     thesaurierend = st.checkbox("Thesaurierender ETF", value = True, help="Aktivieren Sie diese Option, wenn es sich bei Ihrem ETF um einen thesaurierenden ETF handelt. Bei thesaurierenden ETFs wird die Vorabpauschale relevant, da sie jährlich von der Bank berechnet und von den zu zahlenden Steuern abgezogen wird. Bei ausschüttenden ETFs entfällt die Vorabpauschale.")
+    if not thesaurierend:
+        st.info("Für ausschüttende ETFs wird in der Regel keine Vorabpauschale berechnet, da diese meist durch Ausschüttungen ausgeglichen wird. Deswegen wird sie in diesem Rechner nicht berücksichtigt")
+
 
 freibetrag = st.number_input("Noch verfügbarer Sparerpauschbetrag (€)", value=1000.00, min_value=0.00, max_value=2000.00, help="Noch verfügbarer Sparerpauschbetrag für das aktuelle Jahr. Kapitalerträge bis zu diesem Betrag bleiben steuerfrei. In Deutschland beträgt der maximale Sparerpauschbetrag derzeit 1000€ pro Person.")
 if freibetrag < 0:
@@ -300,9 +307,33 @@ if verlusttopf < 0:
     st.warning("Bitte geben Sie einen gültigen Verlusttopf ein.")
     st.stop()
 
-teilfreistellung = st.checkbox("Teilfreistellung für Aktien-ETFs (30%)", value=True, help="Aktien-ETFs mit mindestens 51% Aktienanteil haben eine steuerliche Teilfreistellung. 30% der Gewinne sind steuerfrei, sodass nur 70% des Gewinns versteuert werden.")
-Solidaritätszuschlag = st.checkbox("Solidaritätszuschlag (5,5%)", value=True, help="Der Solidaritätszuschlag beträgt 5,5% der Abgeltungssteuer. Viele Banken führen ihn automatisch ab. Deaktivieren Sie diese Option nur, wenn er auf Ihre Kapitalerträge nicht angewendet wird.")
+teilfreistellung = st. selectbox(
+    "ETF Typ für Teilfreistellung",
+    options=[
+        "Keine Teilfreistellung",
+        "Mischfonds (15%)",
+        "Aktien-ETFs (30%)",
+        "Inland-Immobilienfonds (60%)",
+        "Auslands-Immobilienfonds (80%)"
+    ],
+    index=2,
+    help="Einige Fondsarten haben eine steuerliche Teilfreistellung. Sie können Ihre ETF Art in der Beschreibung Ihres ETFs finden. Die meisten bekannten ETF sind Aktien-ETFs mit 30% Teilfreistellung."
+)
+
+help_text = {
+    "Keine Teilfreistellung": "z.B. Anleihen‑ETFs oder Geldmarkt‑ETFs.",
+    "Mischfonds (15%)": "Mindestens 25% Aktienanteil im Fonds.",
+    "Aktien-ETFs (30%)": "Mindestens 51% Aktienanteil im Fonds.",
+    "Inland-Immobilienfonds (60%)": "Mindestens 51% inländischen Immobilien im Fonds.",
+    "Auslands-Immobilienfonds (80%)": "Mindestens 51% ausländischen Immobilien im Fonds."
+}
+
+st.caption(help_text[teilfreistellung])
+
+# teilfreistellung = st.checkbox("Teilfreistellung für Aktien-ETFs (30%)", value=True, help="Aktien-ETFs mit mindestens 51% Aktienanteil haben eine steuerliche Teilfreistellung. 30% der Gewinne sind steuerfrei, sodass nur 70% des Gewinns versteuert werden.")
+# Solidaritätszuschlag = st.checkbox("Solidaritätszuschlag (5,5%)", value=True, help="Der Solidaritätszuschlag beträgt 5,5% der Abgeltungssteuer. Viele Banken führen ihn automatisch ab. Deaktivieren Sie diese Option nur, wenn er auf Ihre Kapitalerträge nicht angewendet wird.")
 kirchensteuer = st.checkbox("Kirchensteuerpflichtig", help="Wenn Kirchensteuerpflicht besteht, erhöht sich die Steuer auf Kapitalerträge. Der genaue Satz hängt vom Bundesland ab.")
+
 
 
 if kirchensteuer:
@@ -313,7 +344,7 @@ if kirchensteuer:
         help="Kirchensteuer auf Kapitalerträge beträgt 8% (Bayern, Baden-Württemberg) oder 9% (übrige Bundesländer)."
     )
 
-    kirchensteuer_bundesland = 0.09 if kirchensteuer_bundesland == "Andere (9%)" else 0.08
+    # kirchensteuer_bundesland = 0.09 if kirchensteuer_bundesland == "Andere (9%)" else 0.08
 
 if eingabe_optionen == "Manuelle Eingabe":
     upload = st.selectbox(
@@ -433,8 +464,6 @@ elif upload == "CSV hochladen":
         st.stop()
 
 elif upload == "automatische Eingabe für Sparpläne":
-
-    # st.write("Hier können Sie Eckdaten genutzter Sparpläne eingeben. bei Änderungen müssen sie eine neue Zeile ergänzen und die Änderung wie ein neuen Sparplan ansehen. Beachten Sie, dass diese automatische Schätzung eher ungenau ist, da die genauen kurse beim Kauf nicht bekannt sind. Später können Sie die Daten noch bearbeiten oder ergänzen.")
     st.write("""
     Hier können Sie die Eckdaten Ihrer genutzten Sparpläne eingeben. 
     **Wichtig bei Anpassungen Ihres Sparplans:** Falls sich Ihre Sparrate oder der Ausführungstag im Laufe der Zeit geändert haben, legen Sie dafür bitte einfach einen neuen Eintrag mit dem entsprechenden Startdatum an.
@@ -614,25 +643,31 @@ if bereits_verkauft < 0:
     st.warning("Bitte geben Sie eine gültige Anzahl bereits verkaufter Anteile ein.")
     st.stop()
 
-if teilfreistellung:
-    teilfreistellung_quote = 0.30 # oder null bei nicht-aktien etf
-else:
+if teilfreistellung == "Keine Teilfreistellung":
     teilfreistellung_quote = 0.0
+elif teilfreistellung == "Mischfonds (15%)":
+    teilfreistellung_quote = 0.15
+elif teilfreistellung == "Aktien-ETFs (30%)":   
+    teilfreistellung_quote = 0.30
+elif teilfreistellung == "Inland-Immobilienfonds (60%)":
+    teilfreistellung_quote = 0.60
+elif teilfreistellung == "Auslands-Immobilienfonds (80%)":
+    teilfreistellung_quote = 0.80
 
-if Solidaritätszuschlag:
-    steuersatz = 0.26375
-else:
-    steuersatz = 0.25
 if kirchensteuer:
-    steuersatz *= (1 + kirchensteuer_bundesland)
+    if kirchensteuer_bundesland == "Bayern / Baden-Württemberg (8%)":
+        steuersatz = 0.2782
+    elif kirchensteuer_bundesland == "Andere (9%)":
+        steuersatz = 0.2799
 else:
-    steuersatz = steuersatz
+    steuersatz = 0.26375
+
 
 ###################################################
 # vorabpauschale 
 ###################################################
 
-
+tagesgeanue_berechnung = st.checkbox("Tagesgenaue Berechnung der anteiligen Vorabpauschale für das Kaufjahr", value = False, help="Aktivieren Sie diese Option, um den Anteil der Vorabpauschale für das Kaufjahr tagesgenau zu berechnen. Anonsten wird die Vorabpauschale monatsgenau berechnet. Abhängig von Ihrem Broker kann das variieren. Informieren Sie sich bei Ihrem Broker.")
 
 if thesaurierend:
     # lade älteste jahr aus hochgeladener csv datei
@@ -641,63 +676,52 @@ if thesaurierend:
     # nehme von dem ältesten jahr bis zum aktuellen jahr jeweils den kurs zum 1.1. 
     heute = datetime.today().year 
 
-    if eingabe_optionen == "ETF Suche" or eingabe_optionen == "CSV‑Export von Trade Republic":
-        
-        jahresstart = lade_kursdaten(ticker, startjahr)
+    if eingabe_optionen == "Manuelle Eingabe":
+        vorab_manuell_eingeben = True
+    else:
+        vorab_manuell_eingeben = st.checkbox("Vorabpauschale manuell eingeben", help="Aktivieren Sie diese Option, um die Vorabpauschale manuell einzugeben. Dies ist geanuer als die automatische Schätzung, die ohne Aktivierung angewendet wird.")
 
-        # lade alle kursdaten vom 1.1. jedes jahres bis heute
-        vorabpauschale = funktionen.berechne_vorabpauschalen_df(jahresstart, teilfreistellung_quote)
+    if vorab_manuell_eingeben:
+        jahre = list(range(startjahr, datetime.today().year))
 
-    elif eingabe_optionen == "Manuelle Eingabe":
-        # kursdaten manuell einfügen oder ohne vorabpauschale rechnen lassen
+        vorabpauschale = pd.DataFrame({
+            "jahr": jahre,
+            "vorabpauschale_stueck": [0.00000000] * len(jahre)
+        })
 
-        st.markdown("""
-        Die Vorabpauschale ist eine jährliche Mindestbesteuerung für thesaurierende ETFs. 
-        Beim Verkauf wird sie vom steuerpflichtigen Gewinn abgezogen, da darauf bereits Steuern gezahlt wurden.
-        """)
+        st.write("Bitte geben Sie die Vorabpauschale pro Anteil für jedes Jahr ein. Diese Informationen können Sie in Ihrem Broker finden. Falls Sie die Vorabpauschale vernachlässigen möchten, können Sie die Werte einfach auf 0 belassen.")
 
-        ohne_vorabpauschale = st.checkbox("Ohne Vorabpauschale rechnen", value=True, help="Wenn diese Option aktiviert ist, wird keine Vorabpauschale berücksichtigt. Dadurch kann die Steuerberechnung weniger genau sein. Die Vorabpauschale wird normalerweise jährlich von der Bank berechnet und von den zu zahlenden Steuern abgezogen.")
+        vorabpauschale = st.data_editor(
+            vorabpauschale,
+            num_rows="fixed",
+            hide_index=True,
+            column_config={
+                "jahr": st.column_config.NumberColumn(
+                    "Jahr",
+                    disabled=True
+                ),
+                "vorabpauschale_stueck": st.column_config.NumberColumn(
+                    "Vorabpauschale pro Anteil (€)",
+                    help="Vorabpauschale pro Anteil für dieses Jahr",
+                    format="%.8f"
+                )
+            },
+            use_container_width=True
+        )
 
-        aktuelles_jahr = datetime.today().year
+        if vorabpauschale["vorabpauschale_stueck"].isnull().any():
+            st.warning("Bitte füllen Sie alle Felder der Vorabpauschale aus, um fortzufahren.")
+            st.stop()
 
-        if ohne_vorabpauschale or startjahr == aktuelles_jahr:
-            vorabpauschale = pd.DataFrame(columns=["jahr", "vorabpauschale_stueck"])
-        else:
-            jahre = list(range(startjahr, heute + 1))
+    else:
+        if eingabe_optionen == "ETF Suche" or eingabe_optionen == "CSV‑Export von Trade Republic":
+            jahresstart = lade_kursdaten(ticker, startjahr)
 
-            jahresstart = pd.DataFrame({
-                "jahr": jahre,
-                "preis_1_jan": [None] * len(jahre)
-            })
-
-            st.write("Bitte geben Sie die Kursdaten zum 1.1. jedes Jahres ein.")
-
-            jahresstart = st.data_editor(
-                jahresstart,
-                num_rows="fixed",  # keine neuen Zeilen
-                hide_index=True,
-                column_config={
-                    "jahr": st.column_config.NumberColumn(
-                        "Jahr",
-                        help="Kalenderjahr",
-                        disabled=True  # nicht editierbar
-                    ),
-                    "preis_1_jan": st.column_config.NumberColumn(
-                        "Kurs am 1.1. (€)",
-                        help="Kurs des ETFs am ersten Handelstag des Jahres. Dieser Wert wird benötigt, um die Vorabpauschale für dieses Jahr zu berechnen. (z.B. 105.34)",
-                        format="%.2f"
-                    ),
-                },
-                use_container_width=True
-            )
-
-            if jahresstart["preis_1_jan"].isnull().any():
-                st.warning("Bitte füllen Sie alle Kursdaten zum 1.1. jedes Jahres aus, um die Vorabpauschale zu berechnen. Sie können die Vorabpauschale auch deaktivieren, wenn Sie diese Daten nicht haben.")
-                st.stop()
-
-            vorabpauschale = funktionen.berechne_vorabpauschalen_df(jahresstart, teilfreistellung_quote)
+            # lade alle kursdaten vom 1.1. jedes jahres bis heute
+            vorabpauschale = funktionen.berechne_vorabpauschalen_df(jahresstart)
 else:
     vorabpauschale = pd.DataFrame(columns=["jahr", "vorabpauschale_stueck"])
+
 
 
 berechnungstyp = st.selectbox(
@@ -712,18 +736,20 @@ gesamtkosten = sum(data["Anzahl"] * data["Preis"])
 if berechnungstyp == "Steuer und Netto für bestimmte Anzahl berechnen":
     anzahl_verkaufen = st.number_input("Anzahl zu verkaufener Anteile", value=10.00000, format="%.5f", help="Anzahl der ETF-Anteile, die verkauft werden sollen. Der Rechner ermittelt daraus Gewinn, Steuer und Nettoerlös.")
 
-    gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = funktionen.bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft)
-    if rest_zu_verkaufen > 0:
+    if anzahl_verkaufen > max_anteile - bereits_verkauft + 1e-9:
+        anzahl_verkaufen = max_anteile - bereits_verkauft
+        st.warning(f"Sie haben nicht genug Anteile, um diese Anzahl zu verkaufen. Es werden alle {funktionen.anteil(anzahl_verkaufen)} Anteile verkauft.")
+
+     
+    gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = funktionen.bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft, tagesgenau = tagesgeanue_berechnung)
+    if rest_zu_verkaufen > 0.000001:
         st.error("Nicht genug Anteile vorhanden")
         st.stop()
 
-    # teilfreistellung abziehen
-    gewinn_teilfreistellung = gewinn * (1 - teilfreistellung_quote)
-    gewinn_nach_vorabpauschale = max(0, gewinn_teilfreistellung - gesamte_vorabpauschale)
-    gewinn_nach_verlusttopf = max(0, gewinn_nach_vorabpauschale - verlusttopf)
-    gewinn_steuerpflichtig = max(0, gewinn_nach_verlusttopf - freibetrag)
+    gewinn_nach_vorabpauschale, gewinn_teilfreistellung, gewinn_nach_verlusttopf, gewinn_steuerpflichtig = funktionen.bestimme_steuerpflichtigen_gewinnn(gewinn, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag, all=True)
     steuer = gewinn_steuerpflichtig * steuersatz
     netto = brutto - steuer
+
     st.markdown("### Ergebnis Ihrer Berechnung")
 
     
@@ -735,9 +761,10 @@ if berechnungstyp == "Steuer und Netto für bestimmte Anzahl berechnen":
     col2.metric("Zu zahlende Steuer", f"{funktionen.eur(steuer)}", help="Die zu zahlende Steuer wird mit dem steuerpflichtigen Gewinn (nach Berücksichtigung von Teilfreistellung, Vorabpauschale, Verlusttopf und Sparerpauschbetrag) multipliziert. Sie zeigt den Betrag an, der an Steuern für den Verkauf der angegebenen Anzahl von Anteilen zu zahlen ist.")
     col3.metric("Netto nach Steuern", f"{funktionen.eur(netto)}", help="Der Nettoerlös nach Steuern ist der Betrag, der Ihnen nach Abzug der Steuern vom Brutto Verkaufserlös übrig bleibt. Er berücksichtigt die Teilfreistellung, die Vorabpauschale, den Verlusttopf und den Sparerpauschbetrag.")
 
-    diff_gewinn_vorab = gewinn_teilfreistellung - gesamte_vorabpauschale
-    if diff_gewinn_vorab < 0:
-        verlusttopf_nach_verkauf = verlusttopf - diff_gewinn_vorab
+    if gewinn_teilfreistellung < 0:
+        verlusttopf_nach_verkauf = verlusttopf - gewinn_teilfreistellung
+    else:
+        verlusttopf_nach_verkauf = max(0, verlusttopf - gewinn_teilfreistellung)
 
     st.session_state.results = {
         "anzahl_verkaufen": anzahl_verkaufen,
@@ -756,14 +783,10 @@ if berechnungstyp == "Steuer und Netto für bestimmte Anzahl berechnen":
 elif berechnungstyp == "Anteile für gewünschtes Netto berechnen":
     gewolltes_netto = st.number_input("Gewünschtes Netto (€)", value=1000.00, help="Gewünschter Nettoerlös nach Steuern. Der Rechner bestimmt automatisch, wie viele Anteile verkauft werden müssen, um diesen Betrag zu erreichen.")
 
-    anzahl_verkaufen = funktionen.finde_anteile(gewolltes_netto, max_anteile, aktueller_kurs, data, vorabpauschale, bereits_verkauft, steuersatz, teilfreistellung_quote, verlusttopf, freibetrag)
-    gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = funktionen.bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft)
+    anzahl_verkaufen = funktionen.finde_anteile(gewolltes_netto, max_anteile, aktueller_kurs, data, vorabpauschale, bereits_verkauft, steuersatz, teilfreistellung_quote, verlusttopf, freibetrag, tagesgeanue_berechnung)
+    gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = funktionen.bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft, tagesgenau = tagesgeanue_berechnung)
 
-    # teilfreistellung abziehen
-    gewinn_teilfreistellung = gewinn * (1 - teilfreistellung_quote)
-    gewinn_nach_vorabpauschale = max(0, gewinn_teilfreistellung - gesamte_vorabpauschale)
-    gewinn_nach_verlusttopf = max(0, gewinn_nach_vorabpauschale - verlusttopf)
-    gewinn_steuerpflichtig = max(0, gewinn_nach_verlusttopf - freibetrag)
+    gewinn_nach_vorabpauschale, gewinn_teilfreistellung, gewinn_nach_verlusttopf, gewinn_steuerpflichtig = funktionen.bestimme_steuerpflichtigen_gewinnn(gewinn, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag, all=True)
     steuer = gewinn_steuerpflichtig * steuersatz
     netto = brutto - steuer
 
@@ -779,9 +802,10 @@ elif berechnungstyp == "Anteile für gewünschtes Netto berechnen":
     col2.metric("Brutto Verkaufserlös", f"{funktionen.eur(brutto)}", help="Der Brutto Verkaufserlös entspricht der Anzahl verkaufter Anteile multipliziert mit dem aktuellen Kurs pro Anteil. Er stellt den Gesamtbetrag dar, bevor Steuern abgezogen werden.")
     col3.metric("Netto nach Steuern", f"{funktionen.eur(netto)}", help="Der Nettoerlös nach Steuern ist der Betrag, der Ihnen nach Abzug der Steuern vom Brutto Verkaufserlös übrig bleibt. Er berücksichtigt die Teilfreistellung, die Vorabpauschale, den Verlusttopf und den Sparerpauschbetrag.")
 
-    diff_gewinn_vorab = gewinn_teilfreistellung - gesamte_vorabpauschale
-    if diff_gewinn_vorab < 0:
-        verlusttopf_nach_verkauf = verlusttopf - diff_gewinn_vorab
+    if gewinn_teilfreistellung < 0:
+        verlusttopf_nach_verkauf = verlusttopf - gewinn_teilfreistellung
+    else:
+        verlusttopf_nach_verkauf = max(0, verlusttopf - gewinn_teilfreistellung)
 
     st.session_state.results = {
         "anzahl_verkaufen": anzahl_verkaufen,
@@ -798,13 +822,11 @@ elif berechnungstyp == "Anteile für gewünschtes Netto berechnen":
 
 elif berechnungstyp == "Steuerfrei verkaufbare Anteile":
 
-    anzahl_verkaufen = funktionen.finde_anteile_ohne_steuer(max_anteile-bereits_verkauft, aktueller_kurs, data, vorabpauschale, bereits_verkauft, steuersatz, teilfreistellung_quote, verlusttopf, freibetrag)
-    gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = funktionen.bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft)
-    # teilfreistellung abziehen
-    gewinn_teilfreistellung = gewinn * (1 - teilfreistellung_quote)
-    gewinn_nach_vorabpauschale = max(0, gewinn_teilfreistellung - gesamte_vorabpauschale)
-    gewinn_nach_verlusttopf = max(0, gewinn_nach_vorabpauschale - verlusttopf)
-    gewinn_steuerpflichtig = max(0, gewinn_nach_verlusttopf - freibetrag)
+    anzahl_verkaufen = funktionen.finde_anteile_ohne_steuer(max_anteile-bereits_verkauft, aktueller_kurs, data, vorabpauschale, bereits_verkauft, steuersatz, teilfreistellung_quote, verlusttopf, freibetrag, tagesgeanue_berechnung)
+    gewinn, brutto, gesamte_vorabpauschale, rest_zu_verkaufen = funktionen.bestimme_steuer(anzahl_verkaufen, aktueller_kurs, data, vorabpauschale, bereits_verkauft, tagesgenau = tagesgeanue_berechnung)
+    
+    gewinn_nach_vorabpauschale, gewinn_teilfreistellung, gewinn_nach_verlusttopf, gewinn_steuerpflichtig = funktionen.bestimme_steuerpflichtigen_gewinnn(gewinn, teilfreistellung_quote, gesamte_vorabpauschale, verlusttopf, freibetrag, all=True)
+
     steuer = gewinn_steuerpflichtig * steuersatz
     netto = brutto - steuer
 
@@ -817,9 +839,11 @@ elif berechnungstyp == "Steuerfrei verkaufbare Anteile":
     col2.metric("Nettoerlös", f"{funktionen.eur(netto)}", help="Da keine Steuer anfällt, entspricht der Nettoerlös dem Bruttoerlös.")
     col3.metric("Verbliebender Sparerpauschbetrag", f"{funktionen.eur(max(0, freibetrag - gewinn_nach_verlusttopf))}", help="Der verbleibende Sparerpauschbetrag, der nach dem Verkauf übrig bleibt.")
 
-    diff_gewinn_vorab = gewinn_teilfreistellung - gesamte_vorabpauschale
-    if diff_gewinn_vorab < 0:
-        verlusttopf_nach_verkauf = verlusttopf - diff_gewinn_vorab
+    # diff_gewinn_vorab = gewinn_teilfreistellung - gesamte_vorabpauschale
+    if gewinn_teilfreistellung < 0:
+        verlusttopf_nach_verkauf = verlusttopf - gewinn_teilfreistellung
+    else:
+        verlusttopf_nach_verkauf = max(0, verlusttopf - gewinn_teilfreistellung)
 
     st.session_state.results = {
         "anzahl_verkaufen": anzahl_verkaufen,
@@ -854,8 +878,17 @@ if detailierte_darstellung:
         vorabpauschale,
         aktueller_kurs,
         r["verlusttopf_nach_verkauf"],
-        gesamte_vorabpauschale
+        gesamte_vorabpauschale,
+        freibetrag,
     )
+if kirchensteuer:
+    if kirchensteuer_bundesland == "Bayern / Baden-Württemberg (8%)":
+        kirchensteuersatz = "8 %"
+    elif kirchensteuer_bundesland == "Andere (9%)":
+        kirchensteuersatz = "9 %"
+else:
+    kirchensteuersatz = "0 %"
+
 
 if "results" in st.session_state:
     r = st.session_state.results
@@ -864,7 +897,8 @@ if "results" in st.session_state:
         r["brutto"], r["gewinn"], r["gewinn_teilfreistellung"],
         r["gewinn_nach_vorabpauschale"], r["gewinn_nach_verlusttopf"],
         r["gewinn_steuerpflichtig"], r["steuer"], r["netto"],
-        gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name, r["verlusttopf_nach_verkauf"], gesamte_vorabpauschale
+        gesamtkosten, vorabpauschale, aktueller_kurs, freibetrag, etf_name, 
+        r["verlusttopf_nach_verkauf"], gesamte_vorabpauschale, teilfreistellung_quote, kirchensteuersatz
     )
     
     st.download_button(
@@ -873,5 +907,4 @@ if "results" in st.session_state:
         "etf_steuer_berechnung.pdf",
         "application/pdf"
     )
-
 
